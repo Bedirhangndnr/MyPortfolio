@@ -5,6 +5,7 @@ const links = [
   { href: '#hakkimda', label: 'Hakkımda' },
   { href: '#projeler', label: 'Projeler' },
   { href: '#demolar', label: 'Demolar' },
+  { href: '#oyunlar', label: 'Oyunlar' },
   { href: '#iletisim', label: 'İletişim' },
 ]
 

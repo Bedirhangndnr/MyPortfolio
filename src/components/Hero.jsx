@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowDown, Sparkles } from 'lucide-react'
+import { ArrowDown, Sparkles, Gamepad2 } from 'lucide-react'
 import { profile } from '../data/profile.js'
 
 function useTypewriter(words, speed = 90, pause = 1400) {
@@ -27,20 +27,31 @@ function useTypewriter(words, speed = 90, pause = 1400) {
   return text
 }
 
+const CODE = [
+  { t: 'const bedirhan = {', c: 'text-slate-400' },
+  { t: '  rol: "CE öğrencisi",', c: 'text-slate-300' },
+  { t: '  stack: [".NET", "React", "ML"],', c: 'text-slate-300' },
+  { t: '  kahve: Infinity,', c: 'text-slate-300' },
+  { t: '  durum: "yeni projelere açık",', c: 'text-lime-neon' },
+  { t: '}', c: 'text-slate-400' },
+]
+
 export default function Hero() {
   const typed = useTypewriter(profile.taglines)
 
   return (
     <section id="top" className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28">
-      {/* arka plan grid */}
+      {/* arka plan grid + renk lekeleri */}
       <div className="pointer-events-none absolute inset-0 grid-bg opacity-60 [mask-image:radial-gradient(60%_60%_at_50%_30%,black,transparent)]" />
+      <div className="pointer-events-none absolute -top-20 right-0 h-72 w-72 rounded-full bg-accent/20 blur-3xl animate-blob" />
+      <div className="pointer-events-none absolute top-40 -left-10 h-72 w-72 rounded-full bg-lime-neon/10 blur-3xl animate-blob" style={{ animationDelay: '3s' }} />
 
-      <div className="container-page relative">
+      <div className="container-page relative grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+        {/* sol: metin */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="max-w-3xl"
         >
           {profile.available && (
             <span className="chip mb-6">
@@ -62,7 +73,7 @@ export default function Hero() {
             <span className="ml-1 inline-block h-5 w-2 animate-pulse bg-accent align-middle" />
           </p>
 
-          <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-400 sm:text-lg">
+          <p className="mt-6 max-w-xl text-base leading-relaxed text-slate-400 sm:text-lg">
             {profile.bio[0]}
           </p>
 
@@ -70,8 +81,8 @@ export default function Hero() {
             <a href="#projeler" className="btn-primary">
               <Sparkles className="h-4 w-4" /> Projelerimi gör
             </a>
-            <a href="#iletisim" className="btn-ghost">
-              İletişime geç
+            <a href="#oyunlar" className="btn-ghost">
+              <Gamepad2 className="h-4 w-4" /> Oyna
             </a>
           </div>
 
@@ -83,6 +94,59 @@ export default function Hero() {
               </div>
             ))}
           </div>
+        </motion.div>
+
+        {/* sag: animasyonlu terminal karti */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="relative hidden lg:block"
+        >
+          <div className="animate-float">
+            <div className="card overflow-hidden shadow-glow">
+              <div className="flex items-center gap-2 border-b border-white/5 bg-ink-900/60 px-4 py-3">
+                <span className="h-3 w-3 rounded-full bg-rose-500/80" />
+                <span className="h-3 w-3 rounded-full bg-amber-400/80" />
+                <span className="h-3 w-3 rounded-full bg-lime-neon/80" />
+                <span className="ml-2 font-mono text-xs text-slate-500">bedirhan.js</span>
+              </div>
+              <div className="space-y-1 p-5 font-mono text-sm">
+                {CODE.map((line, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.5 + i * 0.15 }}
+                    className={line.c}
+                  >
+                    {line.t}
+                  </motion.div>
+                ))}
+                <div className="mt-1 inline-block h-4 w-2 animate-pulse bg-accent align-middle" />
+              </div>
+            </div>
+          </div>
+
+          {/* yuzen etiketler */}
+          <motion.span
+            className="chip absolute -right-3 top-6 font-mono"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}
+          >
+            .NET
+          </motion.span>
+          <motion.span
+            className="chip absolute -left-4 bottom-10 font-mono"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.4 }}
+          >
+            React
+          </motion.span>
+          <motion.span
+            className="chip absolute right-8 -bottom-3 font-mono"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.6 }}
+          >
+            ML
+          </motion.span>
         </motion.div>
       </div>
 

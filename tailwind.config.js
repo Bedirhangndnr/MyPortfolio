@@ -36,10 +36,21 @@ export default {
           '0%': { backgroundPosition: '0 0' },
           '100%': { backgroundPosition: '40px 40px' },
         },
+        roadmove: {
+          '0%': { backgroundPosition: '0 0' },
+          '100%': { backgroundPosition: '0 48px' },
+        },
+        blob: {
+          '0%, 100%': { transform: 'translate(0px, 0px) scale(1)' },
+          '33%': { transform: 'translate(30px, -40px) scale(1.1)' },
+          '66%': { transform: 'translate(-25px, 25px) scale(0.95)' },
+        },
       },
       animation: {
         float: 'float 6s ease-in-out infinite',
         gridpan: 'gridpan 20s linear infinite',
+        roadmove: 'roadmove 1.1s linear infinite',
+        blob: 'blob 14s ease-in-out infinite',
       },
     },
   },
