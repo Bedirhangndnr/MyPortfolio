@@ -37,6 +37,14 @@ export const gameRegistry = {
     level: 4,
     component: lazy(() => import('./FootballGame.jsx')),
   },
+  cengel: {
+    key: 'cengel',
+    title: 'Çengel Bulmaca',
+    subtitle: 'PIN ile girilen özel bulmaca. Şifreyi bilen bilir. 🔒',
+    emoji: '🧩',
+    level: 5,
+    component: lazy(() => import('./CengelGame.jsx')),
+  },
 }
 
 export const gameList = Object.values(gameRegistry)

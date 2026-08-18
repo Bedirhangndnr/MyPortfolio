@@ -4,22 +4,26 @@ import App from './App.jsx'
 import './index.css'
 
 const FootballGame = lazy(() => import('./games/FootballGame.jsx'))
+const CengelGame = lazy(() => import('./games/CengelGame.jsx'))
 
-// /oyun/futbol -> oyunu tam ekran, tek başına (ayrı sekmede paylaşılabilir link)
-function StandaloneFootball() {
+// /oyun/... -> oyunu tam ekran, tek başına (ayrı sekmede paylaşılabilir link)
+function Standalone({ children }) {
   return (
     <div className="min-h-screen bg-ink-950 px-4 py-10 sm:py-16">
       <Suspense fallback={<div className="py-20 text-center text-slate-400">Yükleniyor…</div>}>
-        <FootballGame />
+        {children}
       </Suspense>
     </div>
   )
 }
 
-const isStandaloneFootball = window.location.pathname.startsWith('/oyun/futbol')
+const path = window.location.pathname
+let page = <App />
+if (path.startsWith('/oyun/futbol')) page = <Standalone><FootballGame /></Standalone>
+else if (path.startsWith('/oyun/cengel')) page = <Standalone><CengelGame /></Standalone>
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {isStandaloneFootball ? <StandaloneFootball /> : <App />}
+    {page}
   </React.StrictMode>,
 )
