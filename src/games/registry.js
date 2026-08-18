@@ -29,6 +29,14 @@ export const gameRegistry = {
     level: 3,
     component: lazy(() => import('./ReactionGame.jsx')),
   },
+  football: {
+    key: 'football',
+    title: 'İki Takım · Ortak Futbolcu',
+    subtitle: 'Çok oyunculu! İki takımda da oynamış futbolcuyu ilk yazan kazanır.',
+    emoji: '⚽️',
+    level: 4,
+    component: lazy(() => import('./FootballGame.jsx')),
+  },
 }
 
 export const gameList = Object.values(gameRegistry)
