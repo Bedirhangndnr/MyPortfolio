@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
-import { Lock, Check, Lightbulb, Eraser, Heart, PartyPopper } from 'lucide-react'
+import { Lock, Check, Lightbulb, Eraser, Heart, PartyPopper, ExternalLink } from 'lucide-react'
 
 // ============================================================
 //  ÇENGEL BULMACA — PIN korumalı özel bulmaca (Merve için ❤️)
@@ -43,8 +43,25 @@ const ENTRIES = [
 const ROWS = 20
 const COLS = 19
 
+// Başlangıçta dolu gelen ipucu kelimeler (hazır çözülmüş)
+const GIVEN_WORDS = ['KAHVE', 'AŞK', 'EV', 'AY', 'DENİZ']
+
 const upTr = (s) => s.toLocaleUpperCase('tr-TR')
 const keyOf = (r, c) => `${r},${c}`
+
+function buildGiven() {
+  const given = {}
+  for (const e of ENTRIES) {
+    if (!GIVEN_WORDS.includes(e.word)) continue
+    for (let i = 0; i < e.word.length; i++) {
+      const r = e.r + (e.dir === 'D' ? i : 0)
+      const c = e.c + (e.dir === 'A' ? i : 0)
+      given[keyOf(r, c)] = e.word[i]
+    }
+  }
+  return given
+}
+const GIVEN = buildGiven()
 
 function buildBoard() {
   const cells = new Map() // key -> { letter, entries: [idx] }
@@ -75,7 +92,7 @@ export default function CengelGame() {
   const [unlocked, setUnlocked] = useState(false)
   const [pin, setPin] = useState('')
   const [pinErr, setPinErr] = useState(false)
-  const [values, setValues] = useState({}) // key -> letter
+  const [values, setValues] = useState({ ...GIVEN }) // key -> letter
   const [checked, setChecked] = useState(false)
   const [sel, setSel] = useState(null) // {r,c}
   const [dirPref, setDirPref] = useState('A')
@@ -128,9 +145,11 @@ export default function CengelGame() {
 
   const typeChar = (ch) => {
     if (!sel) return
+    const k = keyOf(sel.r, sel.c)
+    if (GIVEN[k]) { move(sel, 1); return } // hazır gelen harf değişmez, atla
     const L = upTr(ch)
     if (!/^[A-ZÇĞİIÖŞÜ]$/.test(L)) return
-    setValues((v) => ({ ...v, [keyOf(sel.r, sel.c)]: L }))
+    setValues((v) => ({ ...v, [k]: L }))
     setChecked(false)
     move(sel, 1)
   }
@@ -138,6 +157,7 @@ export default function CengelGame() {
   const backspace = () => {
     if (!sel) return
     const k = keyOf(sel.r, sel.c)
+    if (GIVEN[k]) { move(sel, -1); return }
     setValues((v) => {
       const nv = { ...v }
       if (nv[k]) delete nv[k]
@@ -166,7 +186,7 @@ export default function CengelGame() {
     move(sel, 1)
   }
 
-  const clearAll = () => { setValues({}); setChecked(false) }
+  const clearAll = () => { setValues({ ...GIVEN }); setChecked(false) }
 
   // kazanma kontrolü
   useEffect(() => {
@@ -176,6 +196,18 @@ export default function CengelGame() {
     }
     setWon(true)
   }, [values, cells, won])
+
+  const openTab = (
+    <a
+      href="/oyun/cengel"
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Bulmacayı yeni sekmede/link olarak aç"
+      className="chip"
+    >
+      <ExternalLink className="h-3.5 w-3.5" /> Yeni sekmede aç
+    </a>
+  )
 
   // ---------- PIN ekranı ----------
   if (!unlocked) {
@@ -196,6 +228,7 @@ export default function CengelGame() {
           />
         </div>
         {pinErr && <p className="text-xs text-rose-400">Yanlış PIN. Tekrar dene.</p>}
+        <div className="flex justify-center">{openTab}</div>
       </div>
     )
   }
@@ -247,7 +280,8 @@ export default function CengelGame() {
             </span>
           )}
         </p>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {openTab}
           <button onClick={hint} className="btn-ghost !py-1.5 text-xs" title="Seçili hücrenin harfini ver"><Lightbulb className="h-3.5 w-3.5" /> Harf</button>
           <button onClick={check} className="btn-ghost !py-1.5 text-xs"><Check className="h-3.5 w-3.5" /> Kontrol</button>
           <button onClick={clearAll} className="btn-ghost !py-1.5 text-xs"><Eraser className="h-3.5 w-3.5" /> Temizle</button>
@@ -268,8 +302,10 @@ export default function CengelGame() {
               const isSel = sel && sel.r === r && sel.c === c
               const inActive = activeCells.has(k)
               const num = starts.get(k)
+              const isGiven = !!GIVEN[k]
               let cls = 'relative flex cursor-pointer select-none items-center justify-center rounded-[4px] border text-[13px] font-bold '
-              if (checked && val) cls += val === cell.letter ? 'border-lime-neon/50 bg-lime-neon/15 text-lime-neon ' : 'border-rose-500/60 bg-rose-500/15 text-rose-300 '
+              if (isGiven) cls += isSel || inActive ? 'border-amber-400/50 bg-amber-400/15 text-amber-200 ' : 'border-amber-400/25 bg-amber-400/10 text-amber-200/90 '
+              else if (checked && val) cls += val === cell.letter ? 'border-lime-neon/50 bg-lime-neon/15 text-lime-neon ' : 'border-rose-500/60 bg-rose-500/15 text-rose-300 '
               else if (isSel) cls += 'border-accent bg-accent/25 text-white '
               else if (inActive) cls += 'border-accent/40 bg-accent/10 text-white '
               else cls += 'border-white/15 bg-ink-850 text-white '
