@@ -4,12 +4,13 @@
 
 export const profile = {
   name: 'Bedirhan',
-  role: 'Bilgisayar Mühendisi Adayı & Geliştirici',
+  role: 'Bilgisayar Mühendisi & Yazılım Geliştirici',
   // Hero'da daktilo efektiyle donen kisa etiketler:
   taglines: [
-    'Bilgisayar mühendisliği öğrencisi',
-    'Yazılım & makine öğrenmesi',
+    'Software Developer @ Paynion',
+    'Bilgisayar mühendisi',
     '.NET · Blazor · React',
+    'Yazılım & makine öğrenmesi',
     'Fikirden ürüne',
   ],
   location: 'İstanbul, Türkiye',
@@ -18,7 +19,7 @@ export const profile = {
 
   // Hakkimda bolumu (birden fazla paragraf yazabilirsin)
   bio: [
-    'Merhaba! Ben Bedirhan. İstanbul Medeniyet Üniversitesi’nde bilgisayar mühendisliği öğrencisiyim ve zamanımı yazılım ile makine öğrenmesine ayırmayı seviyorum.',
+    'Merhaba! Ben Bedirhan. İstanbul Medeniyet Üniversitesi bilgisayar mühendisliği mezunuyum. Şu an Paynion’da software developer olarak çalışıyorum; öncesinde Payosfer’de stajyer olarak başlayıp 2,5 yıl .NET Developer olarak ödeme sistemleri üzerine çalıştım.',
     'Fikirleri hızlıca prototipe döküp yayınlamak en sevdiğim şey. .NET/Blazor ile kurumsal uygulamalardan, Python ile makine öğrenmesi projelerine kadar epey şey deniyorum. Bu site de hem beni tanıtan bir portföy, hem de üzerinde çalıştığım işleri ve ufak oyunları yayınladığım bir vitrin.',
   ],
 
