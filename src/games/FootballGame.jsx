@@ -7,7 +7,7 @@ function loadNick() {
 }
 function saveNick(n) { try { localStorage.setItem('bg_nick', n) } catch {} }
 
-const ROUND_SECONDS = 5
+const ROUND_SECONDS = 30
 
 export default function FootballGame() {
   const [nick, setNick] = useState(loadNick())
@@ -121,6 +121,16 @@ export default function FootballGame() {
 
   const submit = () => doSubmit(guess)
   const pickCandidate = (name) => doSubmit(name)
+
+  const showAnswer = async () => {
+    if (!round || round.solved) return
+    setBusy(true)
+    const { data, error } = await supabase.rpc('reveal_answer', { round_id: round.id })
+    setBusy(false)
+    if (error) return setFeedback({ type: 'err', msg: 'Hata: ' + error.message })
+    if (data?.answer) setFeedback({ type: 'warn', msg: `Cevap: ${data.answer}` })
+    refresh(code)
+  }
 
   const nextRound = async () => {
     setBusy(true); setFeedback(null); setCandidates(null)
@@ -277,7 +287,9 @@ export default function FootballGame() {
         <div className="rounded-xl border border-lime-neon/30 bg-lime-neon/5 p-4 text-center">
           <Trophy className="mx-auto h-6 w-6 text-lime-neon" />
           <p className="mt-1 text-sm text-white">
-            <b>{round.winner}</b> kazandı — <span className="text-lime-neon">{round.winner_answer}</span>
+            {round.winner
+              ? (<><b>{round.winner}</b> kazandı — <span className="text-lime-neon">{round.winner_answer}</span></>)
+              : (<>Kimse bulamadı 😅 Cevap: <span className="text-lime-neon">{round.winner_answer}</span></>)}
           </p>
           <button onClick={nextRound} disabled={busy} className="btn-primary mt-3 !py-2 text-xs">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Sonraki tur
@@ -314,6 +326,14 @@ export default function FootballGame() {
           </button>
           <button onClick={submit} disabled={busy} className="btn-primary shrink-0">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        </div>
+      )}
+
+      {!solved && (
+        <div className="text-center">
+          <button onClick={showAnswer} disabled={busy} className="btn-ghost !py-1.5 text-xs text-slate-400">
+            🏳️ Sonucu göster
           </button>
         </div>
       )}
