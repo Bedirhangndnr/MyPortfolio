@@ -5,6 +5,7 @@ import './index.css'
 
 const FootballGame = lazy(() => import('./games/FootballGame.jsx'))
 const CengelGame = lazy(() => import('./games/CengelGame.jsx'))
+const KarneGame = lazy(() => import('./games/KarneGame.jsx'))
 
 // /oyun/... -> oyunu tam ekran, tek başına (ayrı sekmede paylaşılabilir link)
 function Standalone({ children }) {
@@ -21,6 +22,7 @@ const path = window.location.pathname
 let page = <App />
 if (path.startsWith('/oyun/futbol')) page = <Standalone><FootballGame /></Standalone>
 else if (path.startsWith('/oyun/cengel')) page = <Standalone><CengelGame /></Standalone>
+else if (path.startsWith('/oyun/karne')) page = <Standalone><KarneGame /></Standalone>
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

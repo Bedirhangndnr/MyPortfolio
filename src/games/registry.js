@@ -37,6 +37,14 @@ export const gameRegistry = {
     level: 4,
     component: lazy(() => import('./FootballGame.jsx')),
   },
+  karne: {
+    key: 'karne',
+    title: 'Aşk Karnesi',
+    subtitle: 'Sevgililer için senkron emek testi — sınava girin, karnenizi alın. 💌',
+    emoji: '💌',
+    level: 6,
+    component: lazy(() => import('./KarneGame.jsx')),
+  },
   cengel: {
     key: 'cengel',
     title: 'Çengel Bulmaca',
