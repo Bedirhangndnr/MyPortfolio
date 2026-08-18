@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, isConfigured } from '../lib/supabase.js'
-import { Users, Trophy, Send, LogIn, Plus, Copy, Check, Loader2, RotateCcw, Mic, MapPin, MessageSquare } from 'lucide-react'
+import { Users, Trophy, Send, LogIn, Plus, Copy, Check, Loader2, RotateCcw, Mic, MapPin, MessageSquare, ExternalLink } from 'lucide-react'
 
 function loadNick() {
   try { return localStorage.getItem('bg_nick') || '' } catch { return '' }
@@ -26,6 +26,15 @@ export default function FootballGame() {
   const [listening, setListening] = useState(false)
   const chanRef = useRef(null)
   const revealingRef = useRef(false)
+
+  // ---- linkten gelen ?code= varsa oda kodunu otomatik doldur ----
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const c = params.get('code')
+      if (c) setJoinCode(c.toUpperCase().slice(0, 6))
+    } catch {}
+  }, [])
 
   const refresh = useCallback(async (c) => {
     if (!supabase) return
@@ -124,14 +133,14 @@ export default function FootballGame() {
     try { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch {}
   }
 
-  // ---- geri sayim + suresi dolunca reveal ----
+  // ---- geri sayim + suresi dolunca reveal (tamamen client-local, sunucu saatine bagli degil) ----
   useEffect(() => {
     if (screen !== 'playing' || !round || round.solved) return
-    const deadline = round.deadline ? new Date(round.deadline).getTime() : null
-    if (!deadline) { setSecondsLeft(ROUND_SECONDS); return }
     revealingRef.current = false
+    const startedAt = Date.now()
     const tick = () => {
-      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+      const elapsed = (Date.now() - startedAt) / 1000
+      const left = Math.max(0, Math.ceil(ROUND_SECONDS - elapsed))
       setSecondsLeft(left)
       if (left === 0 && !revealingRef.current && !round.candidates) {
         revealingRef.current = true
@@ -140,10 +149,10 @@ export default function FootballGame() {
         })
       }
     }
-    tick()
+    setSecondsLeft(ROUND_SECONDS)
     const t = setInterval(tick, 250)
     return () => clearInterval(t)
-  }, [screen, round?.id, round?.solved, round?.deadline, round?.candidates])
+  }, [screen, round?.id, round?.solved])
 
   // ---- sesli soyleme ----
   const startVoice = () => {
@@ -229,11 +238,22 @@ export default function FootballGame() {
 
   return (
     <div className="mx-auto max-w-lg space-y-5">
-      <div className="flex items-center justify-between">
-        <button onClick={copyCode} className="chip font-mono">
-          Oda: <span className="text-accent">{code}</span>
-          {copied ? <Check className="h-3.5 w-3.5 text-lime-neon" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button onClick={copyCode} className="chip font-mono">
+            Oda: <span className="text-accent">{code}</span>
+            {copied ? <Check className="h-3.5 w-3.5 text-lime-neon" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+          <a
+            href={`/oyun/futbol?code=${code}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Bu oyunu yeni sekmede/link olarak aç"
+            className="chip"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Yeni sekmede aç
+          </a>
+        </div>
         <span className="flex items-center gap-1.5 text-xs text-slate-400"><Users className="h-4 w-4" /> {players.length} oyuncu</span>
       </div>
 
