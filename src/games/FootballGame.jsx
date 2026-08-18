@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, isConfigured } from '../lib/supabase.js'
-import { Users, Trophy, Send, LogIn, Plus, Copy, Check, Loader2, RotateCcw } from 'lucide-react'
+import { Users, Trophy, Send, LogIn, Plus, Copy, Check, Loader2, RotateCcw, Mic, MapPin, MessageSquare } from 'lucide-react'
 
 function loadNick() {
   try { return localStorage.getItem('bg_nick') || '' } catch { return '' }
 }
 function saveNick(n) { try { localStorage.setItem('bg_nick', n) } catch {} }
+
+const ROUND_SECONDS = 5
 
 export default function FootballGame() {
   const [nick, setNick] = useState(loadNick())
@@ -14,18 +16,30 @@ export default function FootballGame() {
   const [joinCode, setJoinCode] = useState('')
   const [round, setRound] = useState(null)
   const [players, setPlayers] = useState([])
+  const [guesses, setGuesses] = useState([])
   const [guess, setGuess] = useState('')
   const [feedback, setFeedback] = useState(null) // {type,msg}
   const [busy, setBusy] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [secondsLeft, setSecondsLeft] = useState(ROUND_SECONDS)
+  const [candidates, setCandidates] = useState(null)
+  const [listening, setListening] = useState(false)
   const chanRef = useRef(null)
+  const revealingRef = useRef(false)
 
   const refresh = useCallback(async (c) => {
     if (!supabase) return
     const { data: r } = await supabase.from('rounds').select('*').eq('room', c).order('id', { ascending: false }).limit(1).maybeSingle()
     if (r) setRound(r)
-    const { data: ps } = await supabase.from('room_players').select('nick,score').eq('room', c).order('score', { ascending: false })
+    const { data: ps } = await supabase.from('room_players').select('nick,score,city').eq('room', c).order('score', { ascending: false })
     if (ps) setPlayers(ps)
+    if (r) {
+      const { data: gs } = await supabase.from('guesses').select('nick,guess_text,correct,created_at').eq('round_id', r.id).order('created_at', { ascending: false }).limit(12)
+      if (gs) setGuesses(gs)
+      if (r.candidates) setCandidates(r.candidates)
+      else setCandidates(null)
+    }
+    return r
   }, [])
 
   const subscribe = useCallback((c) => {
@@ -35,11 +49,28 @@ export default function FootballGame() {
       .channel('room-' + c)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rounds', filter: `room=eq.${c}` }, () => refresh(c))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'room_players', filter: `room=eq.${c}` }, () => refresh(c))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'guesses', filter: `room=eq.${c}` }, () => refresh(c))
       .subscribe()
     chanRef.current = ch
   }, [refresh])
 
   useEffect(() => () => { if (chanRef.current && supabase) supabase.removeChannel(chanRef.current) }, [])
+
+  // ---- konum: odaya girince bir kere sor ----
+  const shareLocation = useCallback(async (c, n) => {
+    if (!navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const lat = Math.round(pos.coords.latitude * 10) / 10
+      const lng = Math.round(pos.coords.longitude * 10) / 10
+      let city = null
+      try {
+        const res = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=tr`)
+        const j = await res.json()
+        city = [j.city || j.locality, j.countryName].filter(Boolean).join(', ')
+      } catch {}
+      supabase.rpc('update_location', { room_code: c, nick: n, lat_in: lat, lng_in: lng, city_in: city })
+    }, () => {}, { enableHighAccuracy: false, timeout: 4000 })
+  }, [])
 
   const createRoom = async () => {
     if (!nick.trim()) return setFeedback({ type: 'warn', msg: 'Önce bir takma ad gir.' })
@@ -49,7 +80,7 @@ export default function FootballGame() {
     setBusy(false)
     if (error) return setFeedback({ type: 'err', msg: 'Hata: ' + error.message })
     setCode(data.code); setRound(data.round); setScreen('playing')
-    subscribe(data.code); refresh(data.code)
+    subscribe(data.code); refresh(data.code); shareLocation(data.code, nick.trim())
   }
 
   const joinRoom = async () => {
@@ -62,13 +93,13 @@ export default function FootballGame() {
     if (error) return setFeedback({ type: 'err', msg: 'Hata: ' + error.message })
     if (data.error) return setFeedback({ type: 'err', msg: data.error })
     setCode(data.code); setRound(data.round); setScreen('playing')
-    subscribe(data.code); refresh(data.code)
+    subscribe(data.code); refresh(data.code); shareLocation(data.code, nick.trim())
   }
 
-  const submit = async () => {
-    if (!round || round.solved || !guess.trim()) return
+  const doSubmit = async (text) => {
+    if (!round || round.solved || !text.trim()) return
     setBusy(true)
-    const { data, error } = await supabase.rpc('submit_guess', { round_id: round.id, guess: guess.trim(), nick: nick.trim() })
+    const { data, error } = await supabase.rpc('submit_guess', { round_id: round.id, guess: text.trim(), nick: nick.trim() })
     setBusy(false)
     if (error) return setFeedback({ type: 'err', msg: 'Hata: ' + error.message })
     setGuess('')
@@ -79,8 +110,11 @@ export default function FootballGame() {
     refresh(code)
   }
 
+  const submit = () => doSubmit(guess)
+  const pickCandidate = (name) => doSubmit(name)
+
   const nextRound = async () => {
-    setBusy(true); setFeedback(null)
+    setBusy(true); setFeedback(null); setCandidates(null)
     await supabase.rpc('new_round', { room_code: code })
     setBusy(false)
     refresh(code)
@@ -88,6 +122,45 @@ export default function FootballGame() {
 
   const copyCode = () => {
     try { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch {}
+  }
+
+  // ---- geri sayim + suresi dolunca reveal ----
+  useEffect(() => {
+    if (screen !== 'playing' || !round || round.solved) return
+    const deadline = round.deadline ? new Date(round.deadline).getTime() : null
+    if (!deadline) { setSecondsLeft(ROUND_SECONDS); return }
+    revealingRef.current = false
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+      setSecondsLeft(left)
+      if (left === 0 && !revealingRef.current && !round.candidates) {
+        revealingRef.current = true
+        supabase.rpc('reveal_candidates', { round_id: round.id }).then(({ data }) => {
+          if (data) setCandidates(data)
+        })
+      }
+    }
+    tick()
+    const t = setInterval(tick, 250)
+    return () => clearInterval(t)
+  }, [screen, round?.id, round?.solved, round?.deadline, round?.candidates])
+
+  // ---- sesli soyleme ----
+  const startVoice = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SR) { setFeedback({ type: 'warn', msg: 'Tarayıcın sesli girişi desteklemiyor.' }); return }
+    const rec = new SR()
+    rec.lang = 'tr-TR'
+    rec.interimResults = false
+    rec.maxAlternatives = 1
+    rec.onstart = () => setListening(true)
+    rec.onend = () => setListening(false)
+    rec.onresult = (e) => {
+      const text = e.results[0][0].transcript
+      setGuess(text)
+      doSubmit(text)
+    }
+    rec.start()
   }
 
   // -------- Backend hazir degilse --------
@@ -110,7 +183,7 @@ export default function FootballGame() {
         <div className="text-center">
           <div className="text-4xl">⚽️</div>
           <p className="mt-2 text-sm text-slate-400">
-            İki takım çıkar; <b className="text-white">ikisinde de oynamış</b> bir futbolcuyu ilk yazan kazanır.
+            İki takım çıkar; <b className="text-white">ikisinde de oynamış</b> bir futbolcuyu ilk yazan kazanır. 5 saniyede kimse bilemezse 5 isim çıkar, doğrusuna ilk tıklayan kazanır.
           </p>
         </div>
 
@@ -145,13 +218,15 @@ export default function FootballGame() {
         </div>
 
         {feedback && <Feedback f={feedback} />}
-        <p className="text-center text-[11px] text-slate-600">Kodu arkadaşlarınla paylaş, aynı odada yarışın.</p>
+        <p className="text-center text-[11px] text-slate-600">Kodu arkadaşlarınla paylaş, aynı odada yarışın. Katılınca kabaca konumun (şehir) skor tablosunda görünür — izin vermezsen sorun değil.</p>
       </div>
     )
   }
 
   // -------- Oyun --------
   const solved = round?.solved
+  const showReveal = !solved && secondsLeft === 0 && candidates && candidates.length > 0
+
   return (
     <div className="mx-auto max-w-lg space-y-5">
       <div className="flex items-center justify-between">
@@ -168,7 +243,15 @@ export default function FootballGame() {
         <span className="font-mono text-sm text-slate-500">vs</span>
         <TeamBox name={round?.club_b} />
       </div>
-      <p className="text-center text-xs text-slate-500">İki takımda da oynamış bir futbolcu yaz.</p>
+
+      {!solved && (
+        <div className="text-center">
+          <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full border-2 font-mono text-2xl font-bold ${secondsLeft <= 2 ? 'border-rose-500 text-rose-400' : 'border-accent text-accent'}`}>
+            {secondsLeft}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">İki takımda da oynamış bir futbolcu yaz.</p>
+        </div>
+      )}
 
       {solved ? (
         <div className="rounded-xl border border-lime-neon/30 bg-lime-neon/5 p-4 text-center">
@@ -180,6 +263,22 @@ export default function FootballGame() {
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Sonraki tur
           </button>
         </div>
+      ) : showReveal ? (
+        <div className="space-y-2">
+          <p className="text-center text-xs text-amber-300">Süre doldu! Doğru futbolcuya ilk tıklayan kazanır:</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {candidates.map((name) => (
+              <button
+                key={name}
+                onClick={() => pickCandidate(name)}
+                disabled={busy}
+                className="rounded-xl border border-white/10 bg-ink-850 px-4 py-3 text-sm font-medium text-white transition hover:border-accent/60 hover:bg-accent/10 disabled:opacity-50"
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
       ) : (
         <div className="flex gap-2">
           <input
@@ -190,6 +289,9 @@ export default function FootballGame() {
             className="w-full rounded-xl border border-white/10 bg-ink-900 px-4 py-2.5 text-white outline-none focus:border-accent/50"
             autoFocus
           />
+          <button onClick={startVoice} disabled={busy || listening} title="Sesli söyle" className="btn-ghost shrink-0">
+            <Mic className={`h-4 w-4 ${listening ? 'animate-pulse text-rose-400' : ''}`} />
+          </button>
           <button onClick={submit} disabled={busy} className="btn-primary shrink-0">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
@@ -197,6 +299,21 @@ export default function FootballGame() {
       )}
 
       {feedback && <Feedback f={feedback} />}
+
+      {/* tahmin akisi */}
+      {guesses.length > 0 && (
+        <div className="card p-4">
+          <p className="section-label mb-2 flex items-center gap-1.5"><MessageSquare className="h-3.5 w-3.5" /> Tahminler</p>
+          <div className="max-h-40 space-y-1 overflow-y-auto">
+            {guesses.map((g, i) => (
+              <div key={i} className="flex items-center justify-between text-xs">
+                <span className="text-slate-400"><b className="text-slate-300">{g.nick}</b>: {g.guess_text}</span>
+                <span className={g.correct ? 'text-lime-neon' : 'text-slate-600'}>{g.correct ? '✓' : '✗'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* skor tablosu */}
       <div className="card p-4">
@@ -207,6 +324,7 @@ export default function FootballGame() {
               <span className={`flex items-center gap-2 ${p.nick === nick ? 'text-accent' : 'text-slate-300'}`}>
                 <span className="font-mono text-xs text-slate-600">{i + 1}.</span> {p.nick}
                 {p.nick === nick && <span className="text-[10px] text-slate-500">(sen)</span>}
+                {p.city && <span className="flex items-center gap-0.5 text-[10px] text-slate-600"><MapPin className="h-2.5 w-2.5" />{p.city}</span>}
               </span>
               <span className="font-mono text-white">{p.score}</span>
             </div>
