@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { X, Pencil, Trophy, Zap, Shield, Target, Wind, Dumbbell, Flame, Star, Check } from 'lucide-react'
-import { overall, tier, initials, labelsFor, shortFor, STAT_KEYS } from './core.js'
+import { overall, tier, initials, labelsFor, shortFor, STAT_KEYS, imgSrc } from './core.js'
 
 // ============================================================
 //  OYUNCU DETAYI — La Liga / FIFA tarzı animasyonlu kart açılışı
@@ -99,7 +99,7 @@ export default function PlayerDetail({ player, allPlayers, onClose, onEdit, vote
               }}
             >
               {p.card_url ? (
-                <img src={p.card_url} alt={p.name} className="block w-full" draggable="false" />
+                <img src={imgSrc(p.card_url)} alt={p.name} className="block w-full" draggable="false" />
               ) : (
                 <BigCard p={p} ov={ov} t={t} S={S} />
               )}
@@ -310,7 +310,7 @@ function BigCard({ p, ov, t, S }) {
         </div>
         <div className="ml-auto h-24 w-24 overflow-hidden rounded-xl bg-black/25" style={{ border: `1px solid ${t.ring}55` }}>
           {p.photo_url
-            ? <img src={p.photo_url} alt="" className="h-full w-full object-cover" />
+            ? <img src={imgSrc(p.photo_url)} alt="" className="h-full w-full object-cover" />
             : <div className="flex h-full w-full items-center justify-center text-2xl font-black opacity-60">{initials(p.name)}</div>}
         </div>
       </div>

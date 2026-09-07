@@ -3,9 +3,9 @@ import { motion } from 'framer-motion'
 import { supabase, isConfigured } from '../lib/supabase.js'
 import PlayerCard, { PitchToken } from './halisaha/PlayerCard.jsx'
 import PlayerDetail from './halisaha/PlayerDetail.jsx'
-import { overall, tier, STAT_KEYS, labelsFor, POSITIONS, teamStrength, autoBalance, defaultSpot } from './halisaha/core.js'
+import { overall, tier, STAT_KEYS, labelsFor, POSITIONS, teamStrength, autoBalance, defaultSpot, imgSrc } from './halisaha/core.js'
 import {
-  Loader2, Plus, Save, Shuffle, Trash2, Upload, X, Lock, ExternalLink, Users, LayoutGrid, Dices, RotateCcw, Share2, Check, Star, Shield, CalendarClock,
+  Loader2, Plus, Save, Shuffle, Trash2, Upload, X, ExternalLink, Users, LayoutGrid, Dices, RotateCcw, Share2, Check, Star, Shield, CalendarClock,
 } from 'lucide-react'
 
 const VOTER_KEY = 'bg_hs_voter'
@@ -54,8 +54,12 @@ export default function HalisahaGame() {
   const [votes, setVotes] = useState({}) // {player_id: {ort, adet}}
   const [myVotes, setMyVotes] = useState({}) // {player_id: score}
   const [copied, setCopied] = useState(false)
+  const [saveState, setSaveState] = useState('idle') // idle | dirty | saving | saved | err
   const pitchRef = useRef(null)
   const dragRef = useRef(null)
+  const dirtyRef = useRef(false)
+  const playersRef = useRef([])
+  const matchRef = useRef(null)
 
   const load = useCallback(async () => {
     const [{ data }, { data: vs }, { data: mine }, { data: cl }, { data: mt }] = await Promise.all([
@@ -102,11 +106,14 @@ export default function HalisahaGame() {
     if (!supabase) { setLoading(false); return }
     load()
     const ch = supabase.channel('hs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hs_players' }, load)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'hs_votes' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hs_players' }, () => { if (!dirtyRef.current) load() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hs_votes' }, () => { if (!dirtyRef.current) load() })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [load])
+
+  useEffect(() => { playersRef.current = players }, [players])
+  useEffect(() => { matchRef.current = matchCode }, [matchCode])
 
   const clubPlayers = useMemo(() => players.filter((p) => !clubId || p.club_id === clubId), [players, clubId])
   const teamA = useMemo(() => clubPlayers.filter((p) => p.team === 'A'), [clubPlayers])
@@ -149,8 +156,10 @@ export default function HalisahaGame() {
         const fy = Math.min(94, Math.max(6, ((t.clientY - rect.top) / rect.height) * 100))
         const team = fx < 50 ? 'A' : 'B'
         setPlayers((ps) => ps.map((p) => (p.id === info.id ? { ...p, team, fx, fy } : p)))
+        markDirty()
       } else {
         setPlayers((ps) => ps.map((p) => (p.id === info.id ? { ...p, team: null, fx: null, fy: null } : p)))
+        markDirty()
       }
     }
     window.addEventListener('pointermove', move, { passive: false })
@@ -166,16 +175,35 @@ export default function HalisahaGame() {
   const dragPlayer = drag ? players.find((p) => p.id === drag.id) : null
 
   // ---------- aksiyonlar ----------
+  const pushSquad = useCallback(async (list, code) => {
+    const rows = list.map((x) => ({ id: x.id, team: x.team || '', fx: x.fx, fy: x.fy }))
+    return code
+      ? await supabase.rpc('hs_save_match_squad', { p_code: code, p_rows: rows })
+      : await supabase.rpc('hs_save_squad', { p_pin: 'acik', p_rows: rows })
+  }, [])
+
   const saveSquad = async () => {
     setBusy(true); setMsg(null)
-    const rows = players.map((x) => ({ id: x.id, team: x.team || '', fx: x.fx, fy: x.fy }))
-    const { data, error } = matchCode
-      ? await supabase.rpc('hs_save_match_squad', { p_code: matchCode, p_rows: rows })
-      : await supabase.rpc('hs_save_squad', { p_pin: 'acik', p_rows: rows })
+    const { data, error } = await pushSquad(players, matchCode)
     setBusy(false)
     if (error || data?.error) { setMsg({ t: 'err', m: error?.message || data.error }); return }
+    setSaveState('saved')
     setMsg({ t: 'ok', m: matchCode ? 'Maç kadrosu kaydedildi — linke gelen herkes bu dizilişi görecek.' : 'Kadro kaydedildi.' })
   }
+
+  // diziliş değişince kendiliğinden kaydet — sayfa yenilenince geri gitmesin
+  const markDirty = useCallback(() => { dirtyRef.current = true; setSaveState('dirty') }, [])
+  useEffect(() => {
+    if (!dirtyRef.current || loading) return
+    setSaveState('saving')
+    const t = setTimeout(async () => {
+      const { data, error } = await pushSquad(playersRef.current, matchRef.current)
+      if (error || data?.error) { setSaveState('err'); return }
+      dirtyRef.current = false
+      setSaveState('saved')
+    }, 700)
+    return () => clearTimeout(t)
+  }, [players, matchCode, loading, pushSquad])
 
   const activeMatch = matches.find((m) => m.code === matchCode) || null
 
@@ -228,10 +256,11 @@ export default function HalisahaGame() {
       return { ...p, team: null, fx: null, fy: null }
     })
     setPlayers(next)
+    markDirty()
     setMsg({ t: 'ok', m: 'Takımlar dengelendi. Beğenmezsen kartları sürükleyip değiştir.' })
   }
 
-  const clearPitch = () => setPlayers((ps) => ps.map((p) => ({ ...p, team: null, fx: null, fy: null })))
+  const clearPitch = () => { setPlayers((ps) => ps.map((p) => ({ ...p, team: null, fx: null, fy: null }))); markDirty() }
 
   const savePlayer = async (form, id) => {
     setBusy(true)
@@ -373,6 +402,11 @@ export default function HalisahaGame() {
               <button onClick={saveSquad} disabled={busy} className="btn-primary !py-1.5 text-xs">
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Kadroyu kaydet
               </button>
+              <span className="flex items-center gap-1 self-center text-[11px] text-slate-500">
+                {saveState === 'saving' && <><Loader2 className="h-3 w-3 animate-spin" /> kaydediliyor…</>}
+                {saveState === 'saved' && <><Check className="h-3 w-3 text-lime-neon" /> diziliş kaydedildi</>}
+                {saveState === 'err' && <span className="text-rose-300">kaydedilemedi</span>}
+              </span>
               <button onClick={copyLink} className="btn-ghost !py-1.5 text-xs">
                 {copied ? <Check className="h-3.5 w-3.5 text-lime-neon" /> : <Share2 className="h-3.5 w-3.5" />} {copied ? 'Link kopyalandı' : 'Linki paylaş'}
               </button>
@@ -510,7 +544,7 @@ function TeamPanel({ k, s, list, votes, onPick }) {
             <button key={p.id} onClick={() => onPick(p)} className="flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition hover:bg-white/5">
               <span className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-ink-850" style={{ border: `1px solid ${tier(ov).ring}66` }}>
                 {p.photo_url
-                  ? <img src={p.photo_url} alt="" className="h-full w-full object-cover" />
+                  ? <img src={imgSrc(p.photo_url)} alt="" className="h-full w-full object-cover" />
                   : <span className="flex h-full w-full items-center justify-center text-[8px] font-bold text-slate-400">{p.name.slice(0,2).toLocaleUpperCase('tr-TR')}</span>}
               </span>
               <span className="flex-1 truncate text-[11px] text-slate-300">{p.name.split(' ')[0]}</span>
@@ -599,7 +633,7 @@ function EditModal({ player, onClose, onSave, onDelete, onUpload, busy }) {
           <div className="shrink-0">
             <div className="h-24 w-24 overflow-hidden rounded-xl" style={{ background: t.bg, border: `1px solid ${t.ring}66` }}>
               {form.photo_url
-                ? <img src={form.photo_url} alt="" className="h-full w-full object-cover" />
+                ? <img src={imgSrc(form.photo_url)} alt="" className="h-full w-full object-cover" />
                 : <div className="flex h-full w-full items-center justify-center text-3xl font-black" style={{ color: t.text }}>{ov}</div>}
             </div>
             <input ref={fileRef} type="file" accept="image/*" onChange={pickFile} className="hidden" />
@@ -655,7 +689,6 @@ function EditModal({ player, onClose, onSave, onDelete, onUpload, busy }) {
             <button onClick={() => onDelete(player.id)} disabled={busy} className="btn-ghost !py-2 text-sm text-rose-300"><Trash2 className="h-4 w-4" /></button>
           )}
         </div>
-        <p className="mt-2 flex items-center justify-center gap-1 text-[10px] text-slate-600"><Lock className="h-3 w-3" /> Kaydetmek için PIN gerekir</p>
       </motion.div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { overall, tier, initials, shortFor, STAT_KEYS } from './core.js'
+import { overall, tier, initials, shortFor, STAT_KEYS, imgSrc } from './core.js'
 
 // FIFA tarzı oyuncu kartı
 export default function PlayerCard({ p, size = 'md', onClick, selected }) {
@@ -34,7 +34,7 @@ export default function PlayerCard({ p, size = 'md', onClick, selected }) {
           style={{ border: `1px solid ${t.ring}44` }}
         >
           {p.photo_url ? (
-            <img src={p.photo_url} alt={p.name} className="h-full w-full object-cover" loading="lazy" />
+            <img src={imgSrc(p.photo_url)} alt={p.name} className="h-full w-full object-cover" loading="lazy" />
           ) : (
             <div className={`flex h-full w-full items-center justify-center font-black opacity-60 ${sm ? 'text-sm' : 'text-lg'}`}>
               {initials(p.name)}
@@ -83,7 +83,7 @@ export function PitchToken({ p, dragging, vote }) {
         style={{ background: t.bg, border: `2.5px solid ${t.ring}` }}
       >
         {p.photo_url ? (
-          <img src={p.photo_url} alt={p.name} className="h-full w-full object-cover" draggable="false" />
+          <img src={imgSrc(p.photo_url)} alt={p.name} className="h-full w-full object-cover" draggable="false" />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-sm font-black" style={{ color: t.text }}>
             {initials(p.name)}
