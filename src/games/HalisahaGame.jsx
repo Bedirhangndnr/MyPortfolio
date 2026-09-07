@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { supabase, isConfigured } from '../lib/supabase.js'
 import PlayerCard, { PitchToken } from './halisaha/PlayerCard.jsx'
+import PlayerDetail from './halisaha/PlayerDetail.jsx'
 import { overall, tier, STAT_KEYS, labelsFor, POSITIONS, teamStrength, autoBalance, defaultSpot } from './halisaha/core.js'
 import {
   Loader2, Plus, Save, Shuffle, Trash2, Upload, X, Lock, ExternalLink, Users, LayoutGrid, Dices, RotateCcw,
@@ -21,6 +22,7 @@ export default function HalisahaGame() {
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('saha') // saha | kartlar
   const [edit, setEdit] = useState(null) // düzenlenen oyuncu
+  const [detail, setDetail] = useState(null) // detay gösterilen oyuncu
   const [pin, setPin] = useState(loadPin())
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -254,7 +256,7 @@ export default function HalisahaGame() {
               <div
                 key={p.id}
                 onPointerDown={(e) => startDrag(e, p)}
-                onClick={() => { if (!dragRef.current) setEdit(p) }}
+                onClick={() => { if (!dragRef.current) setDetail(p) }}
                 className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing ${drag?.id === p.id ? 'opacity-30' : ''}`}
                 style={{ left: `${p.fx ?? 50}%`, top: `${p.fy ?? 50}%` }}
               >
@@ -274,7 +276,7 @@ export default function HalisahaGame() {
             <p className="section-label mb-2">Kadro dışı ({bench.length}) <span className="normal-case text-slate-600">— sahaya sürükle</span></p>
             <div className="flex touch-pan-y gap-2 overflow-x-auto pb-1">
               {bench.map((p) => (
-                <div key={p.id} onPointerDown={(e) => startDrag(e, p)} onClick={() => { if (!dragRef.current) setEdit(p) }}
+                <div key={p.id} onPointerDown={(e) => startDrag(e, p)} onClick={() => { if (!dragRef.current) setDetail(p) }}
                   className={`shrink-0 cursor-grab active:cursor-grabbing ${drag?.id === p.id ? 'opacity-30' : ''}`}>
                   <PlayerCard p={p} size="sm" />
                 </div>
@@ -287,7 +289,7 @@ export default function HalisahaGame() {
         <>
           <div className="flex flex-wrap gap-3">
             {players.map((p) => (
-              <PlayerCard key={p.id} p={p} onClick={() => setEdit(p)} />
+              <PlayerCard key={p.id} p={p} onClick={() => setDetail(p)} />
             ))}
           </div>
           <button onClick={() => setEdit({ isNew: true, name: '', pos: 'ORT', is_gk: false, hiz: 70, sut: 70, bitiricilik: 70, kafa: 70, defans: 70, fizik: 70, patlayicilik: 70 })}
@@ -300,6 +302,15 @@ export default function HalisahaGame() {
         <div className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-1/2" style={{ left: drag.x, top: drag.y }}>
           <PitchToken p={dragPlayer} dragging />
         </div>
+      )}
+
+      {detail && (
+        <PlayerDetail
+          player={players.find((x) => x.id === detail.id) || detail}
+          allPlayers={players}
+          onClose={() => setDetail(null)}
+          onEdit={() => { setEdit(detail); setDetail(null) }}
+        />
       )}
 
       {edit && (
@@ -343,8 +354,10 @@ function EditModal({ player, onClose, onSave, onDelete, onUpload, busy }) {
     name: player.name || '', pos: player.pos || 'ORT', is_gk: !!player.is_gk,
     ...Object.fromEntries(STAT_KEYS.map((k) => [k, player[k] ?? 70])),
     photo_url: player.photo_url || null,
+    card_url: player.card_url || null,
   }))
   const fileRef = useRef(null)
+  const cardRef = useRef(null)
   const L = labelsFor(form)
   const ov = overall({ ...form })
   const t = tier(ov)
@@ -360,6 +373,13 @@ function EditModal({ player, onClose, onSave, onDelete, onUpload, busy }) {
     if (!file) return
     const url = await onUpload(file, player.id)
     if (url) set('photo_url', url)
+  }
+
+  const pickCard = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const url = await onUpload(file, player.id)
+    if (url) set('card_url', url)
   }
 
   const submit = async () => {
@@ -385,8 +405,12 @@ function EditModal({ player, onClose, onSave, onDelete, onUpload, busy }) {
                 : <div className="flex h-full w-full items-center justify-center text-3xl font-black" style={{ color: t.text }}>{ov}</div>}
             </div>
             <input ref={fileRef} type="file" accept="image/*" onChange={pickFile} className="hidden" />
+            <input ref={cardRef} type="file" accept="image/*" onChange={pickCard} className="hidden" />
             <button onClick={() => fileRef.current?.click()} disabled={busy} className="btn-ghost mt-2 w-full !py-1 text-[11px]">
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />} Foto
+              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />} Yüz fotosu
+            </button>
+            <button onClick={() => cardRef.current?.click()} disabled={busy} className="btn-ghost mt-1 w-full !py-1 text-[11px]">
+              <Upload className="h-3 w-3" /> {form.card_url ? 'Kart ✓' : 'Kart görseli'}
             </button>
           </div>
           <div className="flex-1 space-y-2">

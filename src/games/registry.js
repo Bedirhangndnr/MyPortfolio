@@ -37,6 +37,30 @@ export const gameRegistry = {
     level: 4,
     component: lazy(() => import('./FootballGame.jsx')),
   },
+  halisaha: {
+    key: 'halisaha',
+    title: 'Halısaha Kart Sistemi',
+    subtitle: 'FIFA tarzı oyuncu kartları, sürükle-bırak kadro ve takım dengesi. ⚽️',
+    emoji: '🃏',
+    level: 7,
+    component: lazy(() => import('./HalisahaGame.jsx')),
+  },
+  karne: {
+    key: 'karne',
+    title: 'Aşk Karnesi',
+    subtitle: 'Sevgililer için senkron emek testi — sınava girin, karnenizi alın. 💌',
+    emoji: '💌',
+    level: 6,
+    component: lazy(() => import('./KarneGame.jsx')),
+  },
+  cengel: {
+    key: 'cengel',
+    title: 'Çengel Bulmaca',
+    subtitle: 'PIN ile girilen özel bulmaca. Şifreyi bilen bilir. 🔒',
+    emoji: '🧩',
+    level: 5,
+    component: lazy(() => import('./CengelGame.jsx')),
+  },
 }
 
 export const gameList = Object.values(gameRegistry)

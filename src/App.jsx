@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import Nav from './components/Nav.jsx'
 import Hero from './components/Hero.jsx'
 import About from './components/About.jsx'
+import Career from './components/Career.jsx'
 import Projects from './components/Projects.jsx'
 import Demos from './components/Demos.jsx'
 import Games from './components/Games.jsx'
@@ -23,6 +24,7 @@ export default function App() {
       <main>
         <Hero />
         <About />
+        <Career />
         <Projects onOpenDemo={openDemo} />
         <Demos onOpenDemo={openDemo} />
         <Games onOpenGame={openGame} />

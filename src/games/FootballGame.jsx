@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase, isConfigured } from '../lib/supabase.js'
-import { Users, Trophy, Send, LogIn, Plus, Copy, Check, Loader2, RotateCcw, Mic, MapPin, MessageSquare } from 'lucide-react'
+import { Users, Trophy, Send, LogIn, Plus, Copy, Check, Loader2, RotateCcw, Mic, MapPin, MessageSquare, ExternalLink } from 'lucide-react'
 
 function loadNick() {
   try { return localStorage.getItem('bg_nick') || '' } catch { return '' }
 }
 function saveNick(n) { try { localStorage.setItem('bg_nick', n) } catch {} }
 
-const ROUND_SECONDS = 5
+const ROUND_SECONDS = 30
 
 export default function FootballGame() {
   const [nick, setNick] = useState(loadNick())
@@ -26,6 +26,15 @@ export default function FootballGame() {
   const [listening, setListening] = useState(false)
   const chanRef = useRef(null)
   const revealingRef = useRef(false)
+
+  // ---- linkten gelen ?code= varsa oda kodunu otomatik doldur ----
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const c = params.get('code')
+      if (c) setJoinCode(c.toUpperCase().slice(0, 6))
+    } catch {}
+  }, [])
 
   const refresh = useCallback(async (c) => {
     if (!supabase) return
@@ -113,6 +122,16 @@ export default function FootballGame() {
   const submit = () => doSubmit(guess)
   const pickCandidate = (name) => doSubmit(name)
 
+  const showAnswer = async () => {
+    if (!round || round.solved) return
+    setBusy(true)
+    const { data, error } = await supabase.rpc('reveal_answer', { round_id: round.id })
+    setBusy(false)
+    if (error) return setFeedback({ type: 'err', msg: 'Hata: ' + error.message })
+    if (data?.answer) setFeedback({ type: 'warn', msg: `Cevap: ${data.answer}` })
+    refresh(code)
+  }
+
   const nextRound = async () => {
     setBusy(true); setFeedback(null); setCandidates(null)
     await supabase.rpc('new_round', { room_code: code })
@@ -124,14 +143,14 @@ export default function FootballGame() {
     try { navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch {}
   }
 
-  // ---- geri sayim + suresi dolunca reveal ----
+  // ---- geri sayim + suresi dolunca reveal (tamamen client-local, sunucu saatine bagli degil) ----
   useEffect(() => {
     if (screen !== 'playing' || !round || round.solved) return
-    const deadline = round.deadline ? new Date(round.deadline).getTime() : null
-    if (!deadline) { setSecondsLeft(ROUND_SECONDS); return }
     revealingRef.current = false
+    const startedAt = Date.now()
     const tick = () => {
-      const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+      const elapsed = (Date.now() - startedAt) / 1000
+      const left = Math.max(0, Math.ceil(ROUND_SECONDS - elapsed))
       setSecondsLeft(left)
       if (left === 0 && !revealingRef.current && !round.candidates) {
         revealingRef.current = true
@@ -140,10 +159,10 @@ export default function FootballGame() {
         })
       }
     }
-    tick()
+    setSecondsLeft(ROUND_SECONDS)
     const t = setInterval(tick, 250)
     return () => clearInterval(t)
-  }, [screen, round?.id, round?.solved, round?.deadline, round?.candidates])
+  }, [screen, round?.id, round?.solved])
 
   // ---- sesli soyleme ----
   const startVoice = () => {
@@ -229,11 +248,22 @@ export default function FootballGame() {
 
   return (
     <div className="mx-auto max-w-lg space-y-5">
-      <div className="flex items-center justify-between">
-        <button onClick={copyCode} className="chip font-mono">
-          Oda: <span className="text-accent">{code}</span>
-          {copied ? <Check className="h-3.5 w-3.5 text-lime-neon" /> : <Copy className="h-3.5 w-3.5" />}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button onClick={copyCode} className="chip font-mono">
+            Oda: <span className="text-accent">{code}</span>
+            {copied ? <Check className="h-3.5 w-3.5 text-lime-neon" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+          <a
+            href={`/oyun/futbol?code=${code}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Bu oyunu yeni sekmede/link olarak aç"
+            className="chip"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Yeni sekmede aç
+          </a>
+        </div>
         <span className="flex items-center gap-1.5 text-xs text-slate-400"><Users className="h-4 w-4" /> {players.length} oyuncu</span>
       </div>
 
@@ -257,7 +287,9 @@ export default function FootballGame() {
         <div className="rounded-xl border border-lime-neon/30 bg-lime-neon/5 p-4 text-center">
           <Trophy className="mx-auto h-6 w-6 text-lime-neon" />
           <p className="mt-1 text-sm text-white">
-            <b>{round.winner}</b> kazandı — <span className="text-lime-neon">{round.winner_answer}</span>
+            {round.winner
+              ? (<><b>{round.winner}</b> kazandı — <span className="text-lime-neon">{round.winner_answer}</span></>)
+              : (<>Kimse bulamadı 😅 Cevap: <span className="text-lime-neon">{round.winner_answer}</span></>)}
           </p>
           <button onClick={nextRound} disabled={busy} className="btn-primary mt-3 !py-2 text-xs">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />} Sonraki tur
@@ -294,6 +326,14 @@ export default function FootballGame() {
           </button>
           <button onClick={submit} disabled={busy} className="btn-primary shrink-0">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        </div>
+      )}
+
+      {!solved && (
+        <div className="text-center">
+          <button onClick={showAnswer} disabled={busy} className="btn-ghost !py-1.5 text-xs text-slate-400">
+            🏳️ Sonucu göster
           </button>
         </div>
       )}
