@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { X, Pencil, Trophy, Zap, Shield, Target, Wind, Dumbbell, Flame } from 'lucide-react'
 import { overall, tier, initials, labelsFor, shortFor, STAT_KEYS } from './core.js'
 
@@ -61,12 +61,10 @@ export default function PlayerDetail({ player, allPlayers, onClose, onEdit }) {
   const reset = () => { setTilt({ x: 0, y: 0 }); setShine({ x: 50, y: 50 }) }
 
   return (
-    <AnimatePresence>
-      <motion.div
-        className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose}
-      >
+    <div
+      className="hs-fade fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md"
+      onClick={onClose}
+    >
         {/* arka plan ışıması */}
         <motion.div
           className="pointer-events-none fixed inset-0"
@@ -195,9 +193,8 @@ export default function PlayerDetail({ player, allPlayers, onClose, onEdit }) {
               </div>
             )}
           </div>
-        </div>
-      </motion.div>
-    </AnimatePresence>
+      </div>
+    </div>
   )
 }
 

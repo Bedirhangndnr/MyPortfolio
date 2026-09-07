@@ -11,3 +11,4 @@ seed.cjs
 seed_all.sql
 yazma_testi.txt
 .fuse_hidden*
+Claude outputs/
