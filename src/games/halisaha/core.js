@@ -107,4 +107,4 @@ export function defaultSpot(index, team, isGk) {
 
 // tarayıcı önbelleğindeki eski 404 kayıtlarını atlamak için sürüm etiketi
 export const IMG_V = '3'
-export const imgSrc = (url) => (!url ? url : url.startsWith('/kartlar/') ? `${url}?v=${IMG_V}` : url)
+export const imgSrc = (url) => (!url ? url : url.startsWith('/kartlar/') || url.startsWith('/standing/') ? `${url}?v=${IMG_V}` : url)
