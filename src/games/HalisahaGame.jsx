@@ -55,7 +55,7 @@ export default function HalisahaGame() {
   const [votes, setVotes] = useState({}) // {player_id: {ort, adet}}
   const [myVotes, setMyVotes] = useState({}) // {player_id: score}
   const [copied, setCopied] = useState(false)
-  const [reveal, setReveal] = useState(null) // 'A' | 'B'
+  const [reveal, setReveal] = useState(false)
   const [saveState, setSaveState] = useState('idle') // idle | dirty | saving | saved | err
   const pitchRef = useRef(null)
   const dragRef = useRef(null)
@@ -409,11 +409,8 @@ export default function HalisahaGame() {
                 {saveState === 'saved' && <><Check className="h-3 w-3 text-lime-neon" /> diziliş kaydedildi</>}
                 {saveState === 'err' && <span className="text-rose-300">kaydedilemedi</span>}
               </span>
-              <button onClick={() => setReveal('A')} disabled={!teamA.length} className="btn-ghost !py-1.5 text-xs disabled:opacity-40">
-                <Clapperboard className="h-3.5 w-3.5" /> Takım A'yı tanıt
-              </button>
-              <button onClick={() => setReveal('B')} disabled={!teamB.length} className="btn-ghost !py-1.5 text-xs disabled:opacity-40">
-                <Clapperboard className="h-3.5 w-3.5" /> Takım B'yi tanıt
+              <button onClick={() => setReveal(true)} disabled={!teamA.length && !teamB.length} className="btn-ghost !py-1.5 text-xs disabled:opacity-40">
+                <Clapperboard className="h-3.5 w-3.5" /> Kadroyu tanıt · video
               </button>
               <button onClick={copyLink} className="btn-ghost !py-1.5 text-xs">
                 {copied ? <Check className="h-3.5 w-3.5 text-lime-neon" /> : <Share2 className="h-3.5 w-3.5" />} {copied ? 'Link kopyalandı' : 'Linki paylaş'}
@@ -495,10 +492,10 @@ export default function HalisahaGame() {
 
       {reveal && (
         <LineupReveal
-          list={reveal === 'A' ? teamA : teamB}
-          team={reveal}
+          teamA={teamA}
+          teamB={teamB}
           matchTitle={activeMatch?.title || clubs.find((c) => c.id === clubId)?.name}
-          onClose={() => setReveal(null)}
+          onClose={() => setReveal(false)}
         />
       )}
 
