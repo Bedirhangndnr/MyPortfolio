@@ -159,8 +159,11 @@ function PlayerSlot({ p, renk }) {
 }
 
 const soyad = (ad) => {
-  const p = ad.trim().split(' ')
-  return (p.length > 1 ? p[p.length - 1] : p[0]).toLocaleUpperCase('tr-TR')
+  const p = ad.trim().split(' ').filter(Boolean)
+  const son = p[p.length - 1]
+  // "Kaleci 1" gibi isimlerde sayıyı soyadı sanmayalım
+  const kotu = p.length < 2 || /^\d+$/.test(son) || son.length < 3
+  return (kotu ? ad.trim() : son).toLocaleUpperCase('tr-TR')
 }
 
 // kabaca diziliş: sahadaki fx'e göre 3 banda böl (savunma / orta / hücum)
