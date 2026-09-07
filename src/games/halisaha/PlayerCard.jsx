@@ -71,30 +71,61 @@ export default function PlayerCard({ p, size = 'md', onClick, selected }) {
   )
 }
 
-// sahada kullanılan mini rozet
-export function PitchToken({ p, dragging }) {
+// sahada kullanılan rozet — üstüne gelince tüm özellikler açılır
+export function PitchToken({ p, dragging, vote }) {
   const ov = overall(p)
   const t = tier(ov)
+  const S = shortFor(p)
   return (
-    <div className={`flex w-14 flex-col items-center ${dragging ? 'opacity-90' : ''}`}>
+    <div className={`group relative flex w-16 flex-col items-center ${dragging ? 'opacity-90' : ''}`}>
       <div
-        className="relative h-11 w-11 overflow-hidden rounded-full shadow-lg"
-        style={{ background: t.bg, border: `2px solid ${t.ring}` }}
+        className="relative h-14 w-14 overflow-hidden rounded-full shadow-[0_6px_18px_-4px_rgba(0,0,0,0.8)]"
+        style={{ background: t.bg, border: `2.5px solid ${t.ring}` }}
       >
         {p.photo_url ? (
           <img src={p.photo_url} alt={p.name} className="h-full w-full object-cover" draggable="false" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-xs font-black" style={{ color: t.text }}>
+          <div className="flex h-full w-full items-center justify-center text-sm font-black" style={{ color: t.text }}>
             {initials(p.name)}
           </div>
         )}
-        <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-950/90 px-1 text-[9px] font-black tabular-nums" style={{ color: t.ring }}>
-          {ov}
-        </span>
       </div>
-      <span className="mt-0.5 max-w-full truncate rounded bg-ink-950/70 px-1 text-[9px] font-semibold text-white">
+
+      {/* puan rozeti — belirgin */}
+      <span
+        className="pointer-events-none absolute -top-1.5 right-0 rounded-md px-1.5 py-[1px] text-[11px] font-black tabular-nums shadow-md"
+        style={{ background: t.ring, color: '#0b0d14' }}
+      >
+        {ov}
+      </span>
+
+      <span className="mt-1 max-w-full truncate rounded bg-ink-950/85 px-1.5 py-[1px] text-[10px] font-bold text-white">
         {p.name.split(' ')[0]}
       </span>
+
+      {/* hover kartı: tüm özellikler */}
+      <div className="pointer-events-none absolute left-1/2 top-full z-[60] mt-1.5 hidden w-44 -translate-x-1/2 rounded-xl border p-2.5 opacity-0 shadow-2xl transition-opacity duration-150 group-hover:block group-hover:opacity-100"
+        style={{ background: '#0b0d14f2', borderColor: t.ring + '66', backdropFilter: 'blur(6px)' }}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate text-[11px] font-bold text-white">{p.name}</span>
+          <span className="font-mono text-base font-black" style={{ color: t.ring }}>{ov}</span>
+        </div>
+        <div className="mt-0.5 flex items-center gap-2 text-[9px] text-slate-500">
+          <span>{p.pos}</span>
+          {vote && <span className="text-amber-300">★ {vote.ort} <span className="text-slate-600">({vote.adet} oy)</span></span>}
+        </div>
+        <div className="mt-1.5 space-y-[3px]">
+          {STAT_KEYS.map((k) => (
+            <div key={k} className="flex items-center gap-1.5">
+              <span className="w-7 text-[8px] uppercase text-slate-500">{S[k]}</span>
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+                <div className="h-full rounded-full" style={{ width: `${p[k]}%`, background: t.ring }} />
+              </div>
+              <span className="w-5 text-right font-mono text-[9px] font-bold text-white">{p[k]}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

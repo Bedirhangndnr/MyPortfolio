@@ -5,12 +5,32 @@ import PlayerCard, { PitchToken } from './halisaha/PlayerCard.jsx'
 import PlayerDetail from './halisaha/PlayerDetail.jsx'
 import { overall, tier, STAT_KEYS, labelsFor, POSITIONS, teamStrength, autoBalance, defaultSpot } from './halisaha/core.js'
 import {
-  Loader2, Plus, Save, Shuffle, Trash2, Upload, X, Lock, ExternalLink, Users, LayoutGrid, Dices, RotateCcw,
+  Loader2, Plus, Save, Shuffle, Trash2, Upload, X, Lock, ExternalLink, Users, LayoutGrid, Dices, RotateCcw, Share2, Check, Star, Shield, CalendarClock,
 } from 'lucide-react'
 
-const PIN_KEY = 'bg_hs_pin'
-const loadPin = () => { try { return localStorage.getItem(PIN_KEY) || '' } catch { return '' } }
-const savePin = (p) => { try { localStorage.setItem(PIN_KEY, p) } catch {} }
+const VOTER_KEY = 'bg_hs_voter'
+const getVoterId = () => {
+  try {
+    let v = localStorage.getItem(VOTER_KEY)
+    if (!v) { v = 'v-' + Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem(VOTER_KEY, v) }
+    return v
+  } catch { return 'v-anon-' + Date.now() }
+}
+
+
+function tomorrowStr() {
+  const d = new Date(); d.setDate(d.getDate() + 1)
+  return d.toISOString().slice(0, 10)
+}
+function formatMatchTime(start, end, uzun) {
+  try {
+    const s = new Date(start)
+    const gun = s.toLocaleDateString('tr-TR', uzun ? { weekday: 'long', day: 'numeric', month: 'long' } : { day: 'numeric', month: 'short' })
+    const sa = s.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+    const bit = end ? new Date(end).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }) : null
+    return `${gun} ${sa}${bit ? '–' + bit : ''}`
+  } catch { return '' }
+}
 
 const TEAM_META = {
   A: { ad: 'Takım A', color: '#3987e5', soft: 'rgba(57,135,229,0.16)' },
@@ -23,29 +43,75 @@ export default function HalisahaGame() {
   const [tab, setTab] = useState('saha') // saha | kartlar
   const [edit, setEdit] = useState(null) // düzenlenen oyuncu
   const [detail, setDetail] = useState(null) // detay gösterilen oyuncu
-  const [pin, setPin] = useState(loadPin())
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
   const [drag, setDrag] = useState(null) // {id, x, y}
+  const [clubs, setClubs] = useState([])
+  const [clubId, setClubId] = useState(null)
+  const [matches, setMatches] = useState([])
+  const [matchCode, setMatchCode] = useState(() => { try { return new URLSearchParams(window.location.search).get('mac')?.toUpperCase() || null } catch { return null } })
+  const [newMatch, setNewMatch] = useState(null) // {title, date, time}
+  const [votes, setVotes] = useState({}) // {player_id: {ort, adet}}
+  const [myVotes, setMyVotes] = useState({}) // {player_id: score}
+  const [copied, setCopied] = useState(false)
   const pitchRef = useRef(null)
   const dragRef = useRef(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('hs_players').select('*').order('sort')
-    if (data) setPlayers(data)
+    const [{ data }, { data: vs }, { data: mine }, { data: cl }, { data: mt }] = await Promise.all([
+      supabase.from('hs_players').select('*').order('sort'),
+      supabase.from('hs_vote_stats').select('*'),
+      supabase.from('hs_votes').select('player_id,score').eq('voter', getVoterId()),
+      supabase.from('hs_clubs').select('*').order('id'),
+      supabase.from('hs_matches').select('*').order('starts_at', { ascending: true }),
+    ])
+    if (cl) { setClubs(cl); setClubId((c) => c ?? cl[0]?.id ?? null) }
+    if (mt) setMatches(mt)
+    let list = data || []
+    // maç modundaysa kadroyu maçtan al
+    const code = new URLSearchParams(window.location.search).get('mac')?.toUpperCase() || null
+    if (code && mt) {
+      const m = mt.find((x) => x.code === code)
+      if (m) {
+        const { data: sq } = await supabase.from('hs_match_squad').select('*').eq('match_id', m.id)
+        const map = Object.fromEntries((sq || []).map((r) => [r.player_id, r]))
+        list = list.map((p) => (map[p.id] ? { ...p, team: map[p.id].team, fx: map[p.id].fx, fy: map[p.id].fy } : { ...p, team: null, fx: null, fy: null }))
+        setClubId(m.club_id)
+      }
+    }
+    if (data) setPlayers(list)
+    if (vs) setVotes(Object.fromEntries(vs.map((v) => [v.player_id, v])))
+    if (mine) setMyVotes(Object.fromEntries(mine.map((v) => [v.player_id, v.score])))
     setLoading(false)
   }, [])
+
+  const sendVote = useCallback(async (playerId, score) => {
+    setMyVotes((m) => ({ ...m, [playerId]: score }))
+    const { data } = await supabase.rpc('hs_vote', { p_player: playerId, p_voter: getVoterId(), p_score: score })
+    if (data?.ok) setVotes((v) => ({ ...v, [playerId]: { player_id: playerId, ort: data.ort, adet: data.adet } }))
+  }, [])
+
+  const copyLink = () => {
+    try {
+      navigator.clipboard.writeText(window.location.origin + '/oyun/halisaha' + (matchCode ? `?mac=${matchCode}` : ''))
+      setCopied(true); setTimeout(() => setCopied(false), 1800)
+    } catch {}
+  }
 
   useEffect(() => {
     if (!supabase) { setLoading(false); return }
     load()
-    const ch = supabase.channel('hs').on('postgres_changes', { event: '*', schema: 'public', table: 'hs_players' }, load).subscribe()
+    const ch = supabase.channel('hs')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hs_players' }, load)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'hs_votes' }, load)
+      .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [load])
 
-  const teamA = useMemo(() => players.filter((p) => p.team === 'A'), [players])
-  const teamB = useMemo(() => players.filter((p) => p.team === 'B'), [players])
-  const bench = useMemo(() => players.filter((p) => !p.team), [players])
+  const clubPlayers = useMemo(() => players.filter((p) => !clubId || p.club_id === clubId), [players, clubId])
+  const teamA = useMemo(() => clubPlayers.filter((p) => p.team === 'A'), [clubPlayers])
+  const teamB = useMemo(() => clubPlayers.filter((p) => p.team === 'B'), [clubPlayers])
+  const bench = useMemo(() => clubPlayers.filter((p) => !p.team), [clubPlayers])
   const sA = teamStrength(teamA)
   const sB = teamStrength(teamB)
 
@@ -100,28 +166,59 @@ export default function HalisahaGame() {
   const dragPlayer = drag ? players.find((p) => p.id === drag.id) : null
 
   // ---------- aksiyonlar ----------
-  const needPin = () => {
-    let p = pin
-    if (!p) {
-      p = window.prompt('Düzenleme PIN\'i:') || ''
-      if (!p) return null
-      setPin(p); savePin(p)
-    }
-    return p
-  }
-
   const saveSquad = async () => {
-    const p = needPin(); if (!p) return
     setBusy(true); setMsg(null)
     const rows = players.map((x) => ({ id: x.id, team: x.team || '', fx: x.fx, fy: x.fy }))
-    const { data, error } = await supabase.rpc('hs_save_squad', { p_pin: p, p_rows: rows })
+    const { data, error } = matchCode
+      ? await supabase.rpc('hs_save_match_squad', { p_code: matchCode, p_rows: rows })
+      : await supabase.rpc('hs_save_squad', { p_pin: 'acik', p_rows: rows })
     setBusy(false)
-    if (error || data?.error) { setMsg({ t: 'err', m: error?.message || data.error }); if (data?.error) { setPin(''); savePin('') } return }
-    setMsg({ t: 'ok', m: 'Kadro kaydedildi — herkes aynı dizilişi görecek.' })
+    if (error || data?.error) { setMsg({ t: 'err', m: error?.message || data.error }); return }
+    setMsg({ t: 'ok', m: matchCode ? 'Maç kadrosu kaydedildi — linke gelen herkes bu dizilişi görecek.' : 'Kadro kaydedildi.' })
+  }
+
+  const activeMatch = matches.find((m) => m.code === matchCode) || null
+
+  const createMatch = async (title, dateStr, timeStr, endTimeStr) => {
+    if (!clubId) return
+    const start = dateStr && timeStr ? new Date(`${dateStr}T${timeStr}`) : null
+    const end = dateStr && endTimeStr ? new Date(`${dateStr}T${endTimeStr}`) : null
+    if (end && start && end < start) end.setDate(end.getDate() + 1)
+    setBusy(true)
+    const { data, error } = await supabase.rpc('hs_create_match', {
+      p_club: clubId, p_title: title || 'Maç',
+      p_start: start ? start.toISOString() : null, p_end: end ? end.toISOString() : null,
+    })
+    setBusy(false)
+    if (error || data?.error) return setMsg({ t: 'err', m: error?.message || data.error })
+    setNewMatch(null)
+    goMatch(data.code)
+  }
+
+  const goMatch = (code) => {
+    const url = code ? `${window.location.pathname}?mac=${code}` : window.location.pathname
+    window.history.replaceState({}, '', url)
+    setMatchCode(code || null)
+    setTimeout(load, 50)
+  }
+
+  const removeMatch = async (code) => {
+    if (!window.confirm('Bu maç silinsin mi?')) return
+    await supabase.rpc('hs_delete_match', { p_code: code })
+    goMatch(null)
+  }
+
+  const createClub = async () => {
+    const name = window.prompt('Yeni takımın adı:')
+    if (!name) return
+    const { data, error } = await supabase.rpc('hs_create_club', { p_name: name })
+    if (error || data?.error) return setMsg({ t: 'err', m: error?.message || data.error })
+    setMsg({ t: 'ok', m: `"${name}" takımı kuruldu. Kartlar sekmesinden oyuncu ekleyebilirsin.` })
+    load(); setClubId(data.id)
   }
 
   const doBalance = () => {
-    const pool = players.filter((p) => p.active)
+    const pool = clubPlayers.filter((p) => p.active)
     const { A, B } = autoBalance(pool)
     const next = players.map((p) => {
       const ia = A.findIndex((x) => x.id === p.id)
@@ -137,27 +234,24 @@ export default function HalisahaGame() {
   const clearPitch = () => setPlayers((ps) => ps.map((p) => ({ ...p, team: null, fx: null, fy: null })))
 
   const savePlayer = async (form, id) => {
-    const p = needPin(); if (!p) return false
     setBusy(true)
-    const { data, error } = await supabase.rpc('hs_save_player', { p_pin: p, p_id: id ?? null, p_data: form })
+    const { data, error } = await supabase.rpc('hs_save_player', { p_pin: 'acik', p_id: id ?? null, p_data: form })
     setBusy(false)
-    if (error || data?.error) { setMsg({ t: 'err', m: error?.message || data.error }); if (data?.error) { setPin(''); savePin('') } return false }
+    if (error || data?.error) { setMsg({ t: 'err', m: error?.message || data.error }); return false }
     await load()
     return true
   }
 
   const deletePlayer = async (id) => {
-    const p = needPin(); if (!p) return
     if (!window.confirm('Bu oyuncu silinsin mi?')) return
     setBusy(true)
-    const { data, error } = await supabase.rpc('hs_delete_player', { p_pin: p, p_id: id })
+    const { data, error } = await supabase.rpc('hs_delete_player', { p_pin: 'acik', p_id: id })
     setBusy(false)
     if (error || data?.error) return setMsg({ t: 'err', m: error?.message || data.error })
     setEdit(null); load()
   }
 
   const uploadPhoto = async (file, playerId) => {
-    const p = needPin(); if (!p) return null
     const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
     const path = `p${playerId || 'yeni'}-${Date.now()}.${ext}`
     setBusy(true)
@@ -180,12 +274,86 @@ export default function HalisahaGame() {
             <Users className="h-3.5 w-3.5" /> Saha & Takımlar
           </button>
           <button onClick={() => setTab('kartlar')} className={`chip ${tab === 'kartlar' ? '!border-accent/60 !bg-accent/15 text-accent' : ''}`}>
-            <LayoutGrid className="h-3.5 w-3.5" /> Kartlar ({players.length})
+            <LayoutGrid className="h-3.5 w-3.5" /> Kartlar ({clubPlayers.length})
           </button>
         </div>
         <a href="/oyun/halisaha" target="_blank" rel="noopener noreferrer" className="chip">
           <ExternalLink className="h-3.5 w-3.5" /> Yeni sekmede aç
         </a>
+      </div>
+
+      {/* takım + maç bandı */}
+      <div className="card space-y-2.5 p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500">Takım</span>
+          {clubs.map((c) => (
+            <button key={c.id} onClick={() => { setClubId(c.id); goMatch(null) }}
+              className={`chip !py-1 text-[11px] ${clubId === c.id ? '!border-accent/60 !bg-accent/15 text-accent' : ''}`}>
+              <Shield className="h-3 w-3" /> {c.name}
+            </button>
+          ))}
+          <button onClick={createClub} className="chip !py-1 text-[11px] text-slate-400"><Plus className="h-3 w-3" /> Yeni takım</button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2.5">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500">Maç</span>
+          <button onClick={() => goMatch(null)} className={`chip !py-1 text-[11px] ${!matchCode ? '!border-accent/60 !bg-accent/15 text-accent' : ''}`}>
+            Genel kadro
+          </button>
+          {matches.filter((m) => m.club_id === clubId).map((m) => (
+            <button key={m.code} onClick={() => goMatch(m.code)}
+              className={`chip !py-1 text-[11px] ${matchCode === m.code ? '!border-accent/60 !bg-accent/15 text-accent' : ''}`}>
+              <CalendarClock className="h-3 w-3" /> {m.title}
+              {m.starts_at && <span className="ml-1 opacity-70">{formatMatchTime(m.starts_at, m.ends_at)}</span>}
+            </button>
+          ))}
+          <button onClick={() => setNewMatch({ title: '', date: tomorrowStr(), time: '23:00', end: '00:30' })}
+            className="chip !py-1 text-[11px] text-slate-400"><Plus className="h-3 w-3" /> Maç oluştur</button>
+        </div>
+
+        {newMatch && (
+          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-white/10 bg-ink-900/60 p-2.5">
+            <div className="min-w-[130px] flex-1">
+              <label className="mb-0.5 block text-[9px] uppercase text-slate-500">Başlık</label>
+              <input value={newMatch.title} onChange={(e) => setNewMatch({ ...newMatch, title: e.target.value })}
+                placeholder="ör. Salı Maçı" className="w-full rounded-md border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white outline-none focus:border-accent/50" />
+            </div>
+            <div>
+              <label className="mb-0.5 block text-[9px] uppercase text-slate-500">Tarih</label>
+              <input type="date" value={newMatch.date} onChange={(e) => setNewMatch({ ...newMatch, date: e.target.value })}
+                className="rounded-md border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white outline-none focus:border-accent/50" />
+            </div>
+            <div>
+              <label className="mb-0.5 block text-[9px] uppercase text-slate-500">Başlangıç</label>
+              <input type="time" value={newMatch.time} onChange={(e) => setNewMatch({ ...newMatch, time: e.target.value })}
+                className="rounded-md border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white outline-none focus:border-accent/50" />
+            </div>
+            <div>
+              <label className="mb-0.5 block text-[9px] uppercase text-slate-500">Bitiş</label>
+              <input type="time" value={newMatch.end} onChange={(e) => setNewMatch({ ...newMatch, end: e.target.value })}
+                className="rounded-md border border-white/10 bg-ink-850 px-2 py-1 text-xs text-white outline-none focus:border-accent/50" />
+            </div>
+            <button onClick={() => createMatch(newMatch.title, newMatch.date, newMatch.time, newMatch.end)} disabled={busy}
+              className="btn-primary !py-1.5 text-xs">{busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Oluştur</button>
+            <button onClick={() => setNewMatch(null)} className="btn-ghost !py-1.5 text-xs"><X className="h-3.5 w-3.5" /></button>
+          </div>
+        )}
+
+        {activeMatch && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent/8 px-3 py-2">
+            <div className="text-xs">
+              <b className="text-white">{activeMatch.title}</b>
+              {activeMatch.starts_at && <span className="ml-2 text-slate-300">{formatMatchTime(activeMatch.starts_at, activeMatch.ends_at, true)}</span>}
+              <span className="ml-2 font-mono text-[10px] text-slate-500">#{activeMatch.code}</span>
+            </div>
+            <div className="flex gap-1.5">
+              <button onClick={copyLink} className="chip !py-1 text-[11px]">
+                {copied ? <Check className="h-3 w-3 text-lime-neon" /> : <Share2 className="h-3 w-3" />} {copied ? 'Kopyalandı' : 'Maç linkini kopyala'}
+              </button>
+              <button onClick={() => removeMatch(activeMatch.code)} className="chip !py-1 text-[11px] text-rose-300"><Trash2 className="h-3 w-3" /></button>
+            </div>
+          </div>
+        )}
       </div>
 
       {msg && (
@@ -196,79 +364,58 @@ export default function HalisahaGame() {
 
       {tab === 'saha' ? (
         <>
-          {/* takım dengesi */}
-          <div className="card p-4">
-            <p className="section-label mb-3">Takım Dengesi</p>
+          {/* denge şeridi */}
+          <div className="card p-3">
             <BalanceBar sA={sA} sB={sB} />
-            <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-              {[['A', sA, teamA], ['B', sB, teamB]].map(([k, s, list]) => (
-                <div key={k} className="rounded-lg border p-2.5" style={{ borderColor: TEAM_META[k].color + '4d', background: TEAM_META[k].soft }}>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white">{TEAM_META[k].ad}</span>
-                    <span className="font-mono text-sm font-black" style={{ color: TEAM_META[k].color }}>{s.ort || '—'}</span>
-                  </div>
-                  <p className="mt-0.5 text-[10px] text-slate-400">{s.n} oyuncu · toplam {s.toplam}</p>
-                  <div className="mt-1.5 space-y-1">
-                    {['hiz', 'sut', 'defans', 'fizik'].map((sk) => (
-                      <div key={sk} className="flex items-center gap-1.5">
-                        <span className="w-10 text-[9px] uppercase text-slate-500">{sk === 'hiz' ? 'hız' : sk === 'sut' ? 'şut' : sk}</span>
-                        <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
-                          <div className="h-full rounded-full" style={{ width: `${s.sat[sk]}%`, background: TEAM_META[k].color }} />
-                        </div>
-                        <span className="w-5 text-right font-mono text-[9px] text-slate-400">{s.sat[sk]}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {list.length > 0 && (
-                    <p className="mt-1.5 truncate text-[10px] text-slate-500">{list.map((p) => p.name.split(' ')[0]).join(', ')}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               <button onClick={doBalance} className="btn-ghost !py-1.5 text-xs"><Dices className="h-3.5 w-3.5" /> Otomatik dengele</button>
               <button onClick={clearPitch} className="btn-ghost !py-1.5 text-xs"><RotateCcw className="h-3.5 w-3.5" /> Sahayı boşalt</button>
               <button onClick={saveSquad} disabled={busy} className="btn-primary !py-1.5 text-xs">
                 {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Kadroyu kaydet
               </button>
+              <button onClick={copyLink} className="btn-ghost !py-1.5 text-xs">
+                {copied ? <Check className="h-3.5 w-3.5 text-lime-neon" /> : <Share2 className="h-3.5 w-3.5" />} {copied ? 'Link kopyalandı' : 'Linki paylaş'}
+              </button>
             </div>
           </div>
 
-          {/* saha */}
-          <div
-            ref={pitchRef}
-            className="relative w-full touch-none select-none overflow-hidden rounded-2xl border border-white/10"
-            style={{
-              aspectRatio: '16 / 10',
-              background: 'repeating-linear-gradient(90deg,#0f2a17 0 8%,#123219 8% 16%)',
-            }}
-          >
-            {/* çizgiler */}
-            <div className="pointer-events-none absolute inset-3 rounded-lg border-2 border-white/25" />
-            <div className="pointer-events-none absolute inset-y-3 left-1/2 w-0.5 -translate-x-1/2 bg-white/25" />
-            <div className="pointer-events-none absolute left-1/2 top-1/2 h-[22%] w-[14%] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/25" />
-            <div className="pointer-events-none absolute left-3 top-1/2 h-[38%] w-[10%] -translate-y-1/2 border-2 border-l-0 border-white/25" />
-            <div className="pointer-events-none absolute right-3 top-1/2 h-[38%] w-[10%] -translate-y-1/2 border-2 border-r-0 border-white/25" />
-            <span className="pointer-events-none absolute left-4 top-3 text-[10px] font-bold uppercase tracking-widest" style={{ color: TEAM_META.A.color }}>A tarafı</span>
-            <span className="pointer-events-none absolute right-4 top-3 text-[10px] font-bold uppercase tracking-widest" style={{ color: TEAM_META.B.color }}>B tarafı</span>
+          {/* takım A · saha · takım B */}
+          <div className="grid items-start gap-3 lg:grid-cols-[190px_minmax(0,1fr)_190px]">
+            <TeamPanel k="A" s={sA} list={teamA} votes={votes} onPick={setDetail} />
 
-            {players.filter((p) => p.team).map((p) => (
-              <div
-                key={p.id}
-                onPointerDown={(e) => startDrag(e, p)}
-                onClick={() => { if (!dragRef.current) setDetail(p) }}
-                className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing ${drag?.id === p.id ? 'opacity-30' : ''}`}
-                style={{ left: `${p.fx ?? 50}%`, top: `${p.fy ?? 50}%` }}
-              >
-                <PitchToken p={p} />
-              </div>
-            ))}
+            <div
+              ref={pitchRef}
+              className="relative mx-auto w-full max-w-[640px] touch-none select-none rounded-2xl border border-white/10"
+              style={{ aspectRatio: '5 / 4', background: 'repeating-linear-gradient(90deg,#0f2a17 0 8%,#123219 8% 16%)', backgroundClip: 'padding-box', borderRadius: 16 }}
+            >
+              <div className="pointer-events-none absolute inset-2 rounded-lg border-2 border-white/25" />
+              <div className="pointer-events-none absolute inset-y-2 left-1/2 w-0.5 -translate-x-1/2 bg-white/25" />
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[24%] w-[16%] -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/25" />
+              <div className="pointer-events-none absolute left-2 top-1/2 h-[40%] w-[11%] -translate-y-1/2 border-2 border-l-0 border-white/25" />
+              <div className="pointer-events-none absolute right-2 top-1/2 h-[40%] w-[11%] -translate-y-1/2 border-2 border-r-0 border-white/25" />
+              <span className="pointer-events-none absolute left-3 top-2 text-[9px] font-bold uppercase tracking-widest" style={{ color: TEAM_META.A.color }}>A</span>
+              <span className="pointer-events-none absolute right-3 top-2 text-[9px] font-bold uppercase tracking-widest" style={{ color: TEAM_META.B.color }}>B</span>
 
-            {teamA.length === 0 && teamB.length === 0 && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-xs text-white/60">
-                Aşağıdaki kartları sahaya sürükle — sol yarı A takımı, sağ yarı B takımı olur.<br />Ya da "Otomatik dengele"ye bas.
-              </div>
-            )}
+              {clubPlayers.filter((p) => p.team).map((p) => (
+                <div
+                  key={p.id}
+                  onPointerDown={(e) => startDrag(e, p)}
+                  onClick={() => { if (!dragRef.current) setDetail(p) }}
+                  className={`absolute z-10 -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing ${drag?.id === p.id ? 'opacity-30' : ''}`}
+                  style={{ left: `${p.fx ?? 50}%`, top: `${p.fy ?? 50}%` }}
+                >
+                  <PitchToken p={p} vote={votes[p.id]} />
+                </div>
+              ))}
+
+              {teamA.length === 0 && teamB.length === 0 && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-[11px] text-white/60">
+                  Kartları sahaya sürükle — sol yarı A, sağ yarı B.<br />Ya da "Otomatik dengele".
+                </div>
+              )}
+            </div>
+
+            <TeamPanel k="B" s={sB} list={teamB} votes={votes} onPick={setDetail} />
           </div>
 
           {/* yedek havuzu */}
@@ -288,11 +435,11 @@ export default function HalisahaGame() {
       ) : (
         <>
           <div className="flex flex-wrap gap-3">
-            {players.map((p) => (
+            {clubPlayers.map((p) => (
               <PlayerCard key={p.id} p={p} onClick={() => setDetail(p)} />
             ))}
           </div>
-          <button onClick={() => setEdit({ isNew: true, name: '', pos: 'ORT', is_gk: false, hiz: 70, sut: 70, bitiricilik: 70, kafa: 70, defans: 70, fizik: 70, patlayicilik: 70 })}
+          <button onClick={() => setEdit({ isNew: true, club_id: clubId, name: '', pos: 'ORT', is_gk: false, hiz: 70, sut: 70, bitiricilik: 70, kafa: 70, defans: 70, fizik: 70, patlayicilik: 70 })}
             className="btn-ghost text-xs"><Plus className="h-4 w-4" /> Yeni oyuncu ekle</button>
         </>
       )}
@@ -308,6 +455,9 @@ export default function HalisahaGame() {
         <PlayerDetail
           player={players.find((x) => x.id === detail.id) || detail}
           allPlayers={players}
+          vote={votes[detail.id]}
+          myVote={myVotes[detail.id]}
+          onVote={sendVote}
           onClose={() => setDetail(null)}
           onEdit={() => { setEdit(detail); setDetail(null) }}
         />
@@ -324,6 +474,53 @@ export default function HalisahaGame() {
           onUpload={uploadPhoto}
         />
       )}
+    </div>
+  )
+}
+
+function TeamPanel({ k, s, list, votes, onPick }) {
+  const meta = TEAM_META[k]
+  return (
+    <div className="card p-3" style={{ borderColor: meta.color + '3d' }}>
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-sm font-bold text-white">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: meta.color }} /> {meta.ad}
+        </span>
+        <span className="font-mono text-lg font-black" style={{ color: meta.color }}>{s.ort || '—'}</span>
+      </div>
+      <p className="text-[10px] text-slate-500">{s.n} oyuncu · toplam {s.toplam}</p>
+
+      <div className="mt-2 space-y-1">
+        {['hiz', 'sut', 'defans', 'fizik'].map((sk) => (
+          <div key={sk} className="flex items-center gap-1.5">
+            <span className="w-8 text-[9px] uppercase text-slate-500">{sk === 'hiz' ? 'hız' : sk === 'sut' ? 'şut' : sk === 'defans' ? 'def' : 'fiz'}</span>
+            <div className="h-1 flex-1 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${s.sat[sk]}%`, background: meta.color }} />
+            </div>
+            <span className="w-5 text-right font-mono text-[9px] text-slate-400">{s.sat[sk]}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-2.5 space-y-1">
+        {list.map((p) => {
+          const ov = overall(p)
+          const v = votes?.[p.id]
+          return (
+            <button key={p.id} onClick={() => onPick(p)} className="flex w-full items-center gap-1.5 rounded-md px-1 py-0.5 text-left transition hover:bg-white/5">
+              <span className="h-6 w-6 shrink-0 overflow-hidden rounded-full bg-ink-850" style={{ border: `1px solid ${tier(ov).ring}66` }}>
+                {p.photo_url
+                  ? <img src={p.photo_url} alt="" className="h-full w-full object-cover" />
+                  : <span className="flex h-full w-full items-center justify-center text-[8px] font-bold text-slate-400">{p.name.slice(0,2).toLocaleUpperCase('tr-TR')}</span>}
+              </span>
+              <span className="flex-1 truncate text-[11px] text-slate-300">{p.name.split(' ')[0]}</span>
+              {v && <span className="flex items-center gap-0.5 text-[9px] text-amber-300"><Star className="h-2.5 w-2.5 fill-amber-300" />{v.ort}</span>}
+              <span className="font-mono text-[11px] font-bold" style={{ color: tier(ov).ring }}>{ov}</span>
+            </button>
+          )
+        })}
+        {list.length === 0 && <p className="py-2 text-center text-[10px] text-slate-600">boş</p>}
+      </div>
     </div>
   )
 }
@@ -355,6 +552,7 @@ function EditModal({ player, onClose, onSave, onDelete, onUpload, busy }) {
     ...Object.fromEntries(STAT_KEYS.map((k) => [k, player[k] ?? 70])),
     photo_url: player.photo_url || null,
     card_url: player.card_url || null,
+    club_id: player.club_id ?? null,
   }))
   const fileRef = useRef(null)
   const cardRef = useRef(null)

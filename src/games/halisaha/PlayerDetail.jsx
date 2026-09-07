@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { X, Pencil, Trophy, Zap, Shield, Target, Wind, Dumbbell, Flame } from 'lucide-react'
+import { X, Pencil, Trophy, Zap, Shield, Target, Wind, Dumbbell, Flame, Star, Check } from 'lucide-react'
 import { overall, tier, initials, labelsFor, shortFor, STAT_KEYS } from './core.js'
 
 // ============================================================
@@ -25,7 +25,7 @@ function badgesFor(p, all) {
   return b.slice(0, 4)
 }
 
-export default function PlayerDetail({ player, allPlayers, onClose, onEdit }) {
+export default function PlayerDetail({ player, allPlayers, onClose, onEdit, vote, myVote, onVote }) {
   const p = player
   const ov = overall(p)
   const t = tier(ov)
@@ -35,6 +35,9 @@ export default function PlayerDetail({ player, allPlayers, onClose, onEdit }) {
   const [shine, setShine] = useState({ x: 50, y: 50 })
   const cardRef = useRef(null)
   const badges = useMemo(() => badgesFor(p, allPlayers), [p, allPlayers])
+  const [myScore, setMyScore] = useState(myVote ?? overall(p))
+  const [sent, setSent] = useState(false)
+  useEffect(() => { setMyScore(myVote ?? overall(p)); setSent(false) }, [p.id]) // eslint-disable-line
 
   // kadro ortalamasına göre fark
   const avg = useMemo(() => {
@@ -62,7 +65,7 @@ export default function PlayerDetail({ player, allPlayers, onClose, onEdit }) {
 
   return (
     <div
-      className="hs-fade fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md"
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/85 backdrop-blur-md"
       onClick={onClose}
     >
         {/* arka plan ışıması */}
@@ -174,6 +177,39 @@ export default function PlayerDetail({ player, allPlayers, onClose, onEdit }) {
                   </div>
                 )
               })}
+            </div>
+
+            {/* halk oylaması */}
+            <div className="card p-4">
+              <div className="flex items-center justify-between">
+                <p className="section-label flex items-center gap-1.5"><Star className="h-3.5 w-3.5" /> Halkın Puanı</p>
+                {vote ? (
+                  <span className="text-xs text-slate-400">
+                    <b className="font-mono text-base text-amber-300">{vote.ort}</b> <span className="text-[10px]">({vote.adet} oy)</span>
+                  </span>
+                ) : <span className="text-[10px] text-slate-600">henüz oy yok</span>}
+              </div>
+
+              {vote && (
+                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/6">
+                  <motion.div className="h-full rounded-full bg-amber-300" initial={{ width: 0 }} animate={{ width: `${vote.ort}%` }} transition={{ duration: 0.8 }} />
+                </div>
+              )}
+
+              <div className="mt-3 rounded-lg border border-white/10 bg-ink-900/60 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Sence kaç eder?</span>
+                  <span className="font-mono text-lg font-black" style={{ color: t.ring }}>{myScore}</span>
+                </div>
+                <input type="range" min="1" max="99" value={myScore} onChange={(e) => { setMyScore(+e.target.value); setSent(false) }}
+                  className="mt-1.5 w-full accent-amber-300" />
+                <button
+                  onClick={() => { onVote(p.id, myScore); setSent(true) }}
+                  className={`btn-ghost mt-2 w-full !py-1.5 text-xs ${sent ? 'text-lime-neon' : ''}`}>
+                  {sent ? <><Check className="h-3.5 w-3.5" /> Oyun kaydedildi</> : <><Star className="h-3.5 w-3.5" /> {myVote ? 'Oyunu güncelle' : 'Oy ver'}</>}
+                </button>
+                {myVote != null && !sent && <p className="mt-1 text-center text-[10px] text-slate-600">önceki oyun: {myVote}</p>}
+              </div>
             </div>
 
             {/* rozetler */}

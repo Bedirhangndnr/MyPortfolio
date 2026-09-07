@@ -76,7 +76,3 @@
     background-size: 40px 40px;
   }
 }
-
-/* halısaha detay modalı açılışı */
-@keyframes hsFadeIn { from { opacity: 0 } to { opacity: 1 } }
-.hs-fade { animation: hsFadeIn 200ms ease-out }
