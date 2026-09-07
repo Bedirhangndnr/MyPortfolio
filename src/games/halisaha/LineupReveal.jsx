@@ -63,6 +63,8 @@ export default function LineupReveal({ teamA = [], teamB = [], matchTitle, onClo
   const [kayit, setKayit] = useState(false)
   const [videoUrl, setVideoUrl] = useState(null)
   const [blob, setBlob] = useState(null)
+  const [mp4, setMp4] = useState(true)
+  const mimeRef = useRef('video/mp4')
   const [paylas, setPaylas] = useState(null) // {durum:'yukleniyor'|'ok'|'err', url}
   const varliklarRef = useRef({ stand: {}, yuz: {} })
 
@@ -232,12 +234,23 @@ export default function LineupReveal({ teamA = [], teamB = [], matchTitle, onClo
     if (kaydet) {
       try {
         const stream = cv.captureStream(FPS)
-        const tipler = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+        // MP4 (H.264) varsa onu tercih et — her yerde açılıyor
+        const tipler = [
+          'video/mp4;codecs=avc1.42E01E',
+          'video/mp4;codecs=avc1',
+          'video/mp4',
+          'video/webm;codecs=vp9',
+          'video/webm;codecs=vp8',
+          'video/webm',
+        ]
         const mime = tipler.find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || ''
-        const mr = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 6_000_000 } : undefined)
+        const temiz = mime.split(';')[0] || 'video/webm'
+        mimeRef.current = temiz
+        setMp4(temiz === 'video/mp4')
+        const mr = new MediaRecorder(stream, mime ? { mimeType: mime, videoBitsPerSecond: 8_000_000 } : undefined)
         mr.ondataavailable = (e) => { if (e.data.size) parcaRef.current.push(e.data) }
         mr.onstop = () => {
-          const b = new Blob(parcaRef.current, { type: 'video/webm' })
+          const b = new Blob(parcaRef.current, { type: mimeRef.current })
           setBlob(b)
           setVideoUrl(URL.createObjectURL(b))
           setKayit(false)
@@ -277,7 +290,7 @@ export default function LineupReveal({ teamA = [], teamB = [], matchTitle, onClo
     if (!videoUrl) return
     const a = document.createElement('a')
     a.href = videoUrl
-    a.download = `${(matchTitle || 'kadro').replace(/\s+/g, '-').toLocaleLowerCase('tr-TR')}-tanitim.webm`
+    a.download = `${(matchTitle || 'kadro').replace(/\s+/g, '-').toLocaleLowerCase('tr-TR')}-tanitim.${mp4 ? 'mp4' : 'webm'}`
     document.body.appendChild(a); a.click(); a.remove()
   }
 
@@ -286,8 +299,9 @@ export default function LineupReveal({ teamA = [], teamB = [], matchTitle, onClo
     setPaylas({ durum: 'yukleniyor' })
     try {
       const { supabase } = await import('../../lib/supabase.js')
-      const yol = `video/kadro-${Date.now()}.webm`
-      const { error } = await supabase.storage.from('halisaha').upload(yol, blob, { contentType: 'video/webm', upsert: true })
+      const uzanti = mp4 ? 'mp4' : 'webm'
+      const yol = `video/kadro-${Date.now()}.${uzanti}`
+      const { error } = await supabase.storage.from('halisaha').upload(yol, blob, { contentType: mimeRef.current, upsert: true })
       if (error) throw error
       const { data } = supabase.storage.from('halisaha').getPublicUrl(yol)
       await navigator.clipboard.writeText(data.publicUrl).catch(() => {})
@@ -331,7 +345,7 @@ export default function LineupReveal({ teamA = [], teamB = [], matchTitle, onClo
           </button>
           {videoUrl && (
             <>
-              <button onClick={indir} className="btn-ghost !py-1.5 text-xs"><Download className="h-3.5 w-3.5" /> İndir</button>
+              <button onClick={indir} className="btn-ghost !py-1.5 text-xs"><Download className="h-3.5 w-3.5" /> {mp4 ? 'MP4 indir' : 'Videoyu indir'}</button>
               <button onClick={linkAl} disabled={paylas?.durum === 'yukleniyor'} className="btn-ghost !py-1.5 text-xs">
                 {paylas?.durum === 'yukleniyor' ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : paylas?.durum === 'ok' ? <Check className="h-3.5 w-3.5 text-lime-neon" />
